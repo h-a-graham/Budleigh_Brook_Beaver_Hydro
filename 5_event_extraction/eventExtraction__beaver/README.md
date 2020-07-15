@@ -1,0 +1,3 @@
+Event Extraction Module written by Josie Ashe.
+
+Add relevant citations here asap...
