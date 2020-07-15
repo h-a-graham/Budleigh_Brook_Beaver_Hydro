@@ -458,7 +458,7 @@ ggsave("6_Event_Stats/plots/Fig4.Excedence_Rain_Season.jpg", plot=Exc.glm.hs.sav
 # --------------- Quantile Regression ------------------------
 # Now adjusted to interactive model...
 
-qr.mod <- rq(Q.peak.m3.s ~ rain.mean * Beaver, tau = c(0.25, 0.5, 0.7, 0.9), data= hyd_dat2)
+qr.mod <- rq(Q.peak.m3.s ~ rain.mean + Beaver, tau = c(0.25, 0.5, 0.7, 0.9), data= hyd_dat2)
 print(tidy(qr.mod, se = "nid"), n=24)
 
 
@@ -469,7 +469,7 @@ qr.tidy <- tidy(qr.mod, se = "nid") %>%
                                  ifelse(p.value < 0.1, paste(formatC(p.value,format = "f", 3), '.', sep = " "),
                                         formatC(p.value,format = "f", 3))))) %>%
   rename(T.statistic = statistic, quantile = tau) %>%
-  mutate(term = rep(c('Intercept', 'Mean Rainfall', 'Beaver Present', 'Mean Rainfall:Beaver Present'),4)) %>%
+  mutate(term = rep(c('Intercept', 'Mean Rainfall', 'Beaver Present'),4)) %>%
   select(term, quantile, estimate, std.error, conf.low, conf.high, T.statistic, p.value)
 
 
@@ -477,7 +477,7 @@ qr.tidy <- tidy(qr.mod, se = "nid") %>%
 rq.new_dat <- Create_Data(.data=hyd_dat2, var='rain.mean')
 
 rq_pred_func <- function(.data, new.data, q){
-  qr.mod <- rq(Q.peak.m3.s ~ rain.mean * Beaver, tau = c(q), data= .data)
+  qr.mod <- rq(Q.peak.m3.s ~ rain.mean + Beaver, tau = c(q), data= .data)
   as_tibble(predict.rq(object=qr.mod, newdata = new.data, interval ='confidence', level = .95))%>%
     bind_cols(., new.data) %>%
     mutate(.tau = as_factor(!!q))
@@ -660,7 +660,7 @@ Wet_Ante_df <- hyd_dat2 %>%
   filter(anti.rain.mm5d > quantile(anti.rain.mm5d, .75) & per_q <5)
 
 
-m9  <- glm(Q.peak.m3.s ~ rain.mean * Beaver, data= Wet_Ante_df, family = Gamma(link='identity'), start = c(0.1, 2.5, 0, 0))
+m9  <- glm(Q.peak.m3.s ~ rain.mean + Beaver, data= Wet_Ante_df, family = Gamma(link='identity'), start = c(0.1, 2.5, 0))
 
 glance(m9) # not the lowest AIC/BIC but better residuals - go with this.
 
@@ -673,7 +673,7 @@ m9.tidy <- tidy(m9) %>%
                                  ifelse(p.value < 0.1, paste(formatC(p.value,format = "f", 3), '.', sep = " "),
                                         formatC(p.value,format = "f", 3))))) %>%
   rename(T.statistic = statistic) %>%
-  mutate(term = c('Intercept', 'Mean Rainfall', 'Beaver Present', 'Mean Rainfall:Beaver Present'))
+  mutate(term = c('Intercept', 'Mean Rainfall', 'Beaver Present'))
 
 
 autoplot(m9, which = 1:6, ncol = 3, label.size = 3)

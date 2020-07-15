@@ -8,7 +8,7 @@ library(quantreg)
 
 # ------------------- DEFINE DATA PATHS  --------------------------
 
-EB_Stage1 <-'./2_Join_Clean_Stage_Data/EnvAgency_Data_EastBudleigh/EastBudleighStream_SG_POR_csv.csv'
+EB_Stage1 <- './2_Join_Clean_Stage_Data/EnvAgency_Data_EastBudleigh/EastBudleighStream_SG_POR_csv.csv'
 EB_Stage2 <- './2_Join_Clean_Stage_Data/EnvAgency_Data_EastBudleigh/East Budleigh Hayes Lane.2017 - date.csv'
 EB_Stage3 <- './2_Join_Clean_Stage_Data/EnvAgency_Data_EastBudleigh/Hayes Lane 11.2018 - 03.2019.csv'
 EB_Stage4 <- './2_Join_Clean_Stage_Data/EnvAgency_Data_EastBudleigh/East Budleigh Hayes Lane 2019 -2020.csv'

@@ -282,7 +282,7 @@ inter.stat.tab <- function(.model){
                                    ifelse(p.value < 0.1, paste(formatC(p.value,format = "f", 3), '.', sep = " "),
                                           formatC(p.value,format = "f", 3))))) %>%
     rename(T.statistic = statistic) %>%
-    mutate(term = c('Intercept', 'Total Rainfall', 'Hyd. Season', 'Beaver', 'Beaver:Hyd. Season'))
+    mutate(term = c('Intercept', 'Total Rainfall', 'Hyd. Season', 'Beaver', 'Beaver:Dry Season'))
 }
 
 EB.m3.tidy <- inter.stat.tab(EB_m3b)
@@ -461,4 +461,99 @@ join.glm4.all <- join.vert(join.glm4.plot, join.glm4.tab)
 
 ggsave("6_Event_Stats/Join_plots/Fig5.GLM4.jpg", plot = join.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
+
+# --------------- Q5 Q95 (Flashiness Ratios) -------------------------
+
+EB_full_flow <- read_rds('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds') %>%
+  mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
+                                   ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
+                                            datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No"))))%>%
+  filter(Beaver != "Unsure")
+
+
+# create Summary tibble
+Q5Q95.tab <- full_flow %>%
+  drop_na()%>%
+  group_by(Beaver) %>% 
+  summarize(Mean = mean(q), Median = median(q), R2FDC = (log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33),
+            Q5 = quantile(q, 0.95), Q95 = quantile(q, 0.05)) %>%
+  mutate(Beaver = c('Beaver Absent','Beaver Present'), `Q5:Q95 ratio` = Q5/Q95) %>%
+  rename(" " = Beaver) %>%
+  bind_rows(summarise(.," " = '% Change',
+                      Mean = (Mean[2]-Mean[1])/Mean[1]*100,
+                      Median = (Median[2]-Median[1])/Median[1]*100,
+                      R2FDC= (R2FDC[2]-R2FDC[1])/R2FDC[1]*100,
+                      Q5 = (Q5[2]-Q5[1])/Q5[1]*100,
+                      Q95 = (Q95[2]-Q95[1])/Q95[1]*100,
+                      `Q5:Q95 ratio` = (`Q5:Q95 ratio`[2]-`Q5:Q95 ratio`[1])/`Q5:Q95 ratio`[1]*100,))%>%
+  mutate_at(vars(Mean, Median, R2FDC, Q5, Q95, `Q5:Q95 ratio`), round,3) 
+
+
+# Creat table Grob for adding to flow duration curve plot
+g1 <- tableGrob(Q5Q95.tab, rows=NULL,
+                theme = ttheme_minimal(core = list(fg_params=list(cex = 0.8)),
+                                       colhead = list(fg_params=list(cex = 0.8)),
+                                       rowhead = list(fg_params=list(cex = 0.8)),
+                                       padding = unit(c(3,2),"mm")))
+g2 <- tableGrob(Q5Q95.tab, rows=NULL, 
+                cols=as.character(Q5Q95.tab[3, 1:7]),
+                theme = ttheme_minimal(core = list(fg_params=list(cex = 0.8)),
+                                       colhead = list(fg_params=list(cex = 0.8)),
+                                       rowhead = list(fg_params=list(cex = 0.8)),
+                                       padding = unit(c(3,2),"mm"))) 
+
+FlowDur.tab <- rbind(g1[-nrow(g1), ], g2[1,])
+
+
+# ----------------- flow duration curves ------------------------
+
+NoBeavCurve <-  full_flow %>%
+  drop_na() %>%
+  filter(Beaver == 'No')%>%
+  select(q, Beaver) %>%
+  arrange(desc(q)) %>%
+  mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
+
+
+YesBeavCurve <-  full_flow %>%
+  drop_na() %>%
+  filter(Beaver == 'Yes')%>%
+  select(q, Beaver) %>%
+  arrange(desc(q)) %>%
+  mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
+
+BefAftCurve <- bind_rows(NoBeavCurve, YesBeavCurve)
+head(BefAftCurve)
+tail(BefAftCurve)
+
+
+FlowDur.plt <- ggplot(BefAftCurve, aes(x = pcntexceedance, y = q, colour=Beaver)) +
+  geom_line() +
+  xlab ("% time flow equalled or exceeded") +
+  ylab(expression(Flow~(m^{3}~s^{-1})))+
+  scale_x_continuous(labels = scales::percent) +
+  scale_y_log10() +
+  geom_vline(xintercept=0.05, lwd = 0.5, linetype=3) +
+  annotate("text", x=0.08, label="Q5", y=1, size=3) +
+  geom_vline(xintercept=0.95, lwd = 0.5, linetype=3) +
+  annotate("text", x=0.91, label="Q95", y=1, size=3) +
+  annotation_logticks(sides = "l", colour='grey') +
+  scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  theme_bw()+
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
+        strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+        strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
+        legend.position=c(.78,.87),
+        legend.background=element_blank(),
+        legend.title=element_text(size=10),
+        panel.border = element_blank())
+
+
+flow_dur.save <- grid.arrange(FlowDur.plt, FlowDur.tab,
+                              nrow=2,
+                              as.table=TRUE,
+                              heights=c(3,0.7))
+
+ggsave("6_Event_Stats/plots/Fig9.FlowExCurve.jpg", plot = flow_dur.save, width = 15, height = 15, units = 'cm', dpi = 600)
 

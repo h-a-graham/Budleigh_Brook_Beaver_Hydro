@@ -6,11 +6,11 @@ And here's the rough result...
 ![Bud Brook Location](7_Site_Location/exports/BudBrookLoc.jpg) 
 Location of Budeligh brook catchemnt, gauging station and Beaver dam sequence.
 
-![East Bud example1](6_Event_Stats/plots/Fig6.Q2Plus_glm.jpg)  
-GLM showing peak flow attenuation for events with peak flow of magnitude greater than Q2  
+![East Bud example1](6_Event_Stats/Join_plots/Fig2.GLM1.jpg)  
+GLM showing flow attenuation post beaver when compared with control catchment. 
 
-![East Bud example2](6_Event_Stats/plots/Fig4.Excedence_Rain_Season.jpg)
-GLM for all events showing change in peak flow exceedance limit across Hydrological season.
+![East Bud example2](6_Event_Stats/Join_plots/Fig3.GLM2.jpg)
+GLM with Hydrological season as covariate. Shows attenuation occurs to a greater extent during the wet season
 
-![East Bud example3](6_Event_Stats/plots/Fig5.QuantileReg.jpg)
-Quantile regression for all events across different tau values - indicating greater attenuation at higher flows.
+![East Bud example3](6_Event_Stats/Join_plots/Fig4.GLM3.jpg)
+GLM fitted to subset of data where flow is larger than Q5 (i.e >95th percentile). Shows that attenuation persists even at high flows.
