@@ -152,7 +152,7 @@ EBUD_hyd_datb<- EBUD_hyd_dat %>%
 
 EB_m2 <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver, data= EBUD_hyd_datb, family = Gamma(link='identity')) # prelim run to get starting vals
 
-EB_m2b <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver, data= EBUD_hyd_datb, family = Gamma(link='identity'), start = coef(m2)) # final model
+EB_m2b <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver, data= EBUD_hyd_datb, family = Gamma(link='identity'), start = coef(EB_m2)) # final model
 summary(EB_m2b)
 
 autoplot(EB_m2b, which = 1:6, ncol = 3, label.size = 3)
@@ -307,12 +307,12 @@ POP.m3.tidy <- inter.stat.tab(POP_m3b)
 
 #plotting
 
-EB.glm2 <- glm1.plot(EBUD_hyd_datc, EB_m3.ND, "Budleigh Brook") + 
+EB.glm2 <- glm.plot(EBUD_hyd_datc, EB_m3.ND, "Budleigh Brook") + 
   facet_wrap(~Hydro.Seas, ncol = 1) + 
   theme(strip.text.x = element_text(size = 12, color = "black", face = "italic"),
         strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
 
-POP.glm2 <- glm1.plot(POP_hyd_dat, POP_m3.ND, "Colaton Brook") +
+POP.glm2 <- glm.plot(POP_hyd_dat, POP_m3.ND, "Colaton Brook") +
   facet_wrap(~Hydro.Seas, ncol = 1) +
   theme(axis.title.y = element_blank(),
         axis.text.y=element_blank(),
@@ -459,6 +459,6 @@ join.glm4.tab <- join.hori(EB.m9.tidy, POP.m9.tidy)
 
 join.glm4.all <- join.vert(join.glm4.plot, join.glm4.tab)
 
-ggsave("6_Event_Stats/Join_plots/Fig4.GLM4.jpg", plot = join.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/Join_plots/Fig5.GLM4.jpg", plot = join.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
 
