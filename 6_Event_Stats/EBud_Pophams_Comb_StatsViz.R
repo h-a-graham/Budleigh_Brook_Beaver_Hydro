@@ -76,7 +76,7 @@ CleanData <- function(.data){
                                           (ifelse(Month >=12 | Month <3, "Winter", ""))))))))) %>%
   mutate(Hydro.Seas = ifelse(Month >= 10 | Month < 4, "Wet", "Dry")) %>%
   mutate(Season = fct_relevel(Season, "Winter","Spring", "Summer", "Autumn"))%>%
-  mutate(Hydro.Seas = fct_relevel(Hydro.Seas, "Wet", "Dry")) %>%
+  mutate(Hydro.Seas = fct_relevel(Hydro.Seas, "Dry", "Wet")) %>%
   select(-c(response.eventID,check.outlier1)) %>%
   drop_na()
 }
@@ -279,7 +279,7 @@ inter.stat.tab <- function(.model){
                                    ifelse(p.value < 0.1, paste(formatC(p.value,format = "f", 3), '.', sep = " "),
                                           formatC(p.value,format = "f", 3))))) %>%
     rename(T.statistic = statistic) %>%
-    mutate(term = c('Intercept', 'Total Rainfall', 'Hyd. Season', 'Beaver', 'Beaver:Dry Season'))
+    mutate(term = c('Intercept', 'Total Rainfall', 'Wet Season', 'Beaver', 'Beaver:Wet Season'))
 }
 
 EB.m3.tidy <- inter.stat.tab(EB_m3b)
