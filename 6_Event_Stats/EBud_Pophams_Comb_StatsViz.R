@@ -213,11 +213,18 @@ glm.plot <- function(.data, model.data, title) {
           plot.title = element_text(hjust = 0.5, size = 11))
 }
  
-merge.plots <- function(plot.1, plot.2){
+merge.plots <- function(plot.1, plot.2, fdc){
+  if(missing(fdc)) {
+    fdc = FALSE
+  }
   p <- ggarrange(plot.1, plot.2, ncol=2, common.legend = TRUE, legend="top", widths = c(3, 2.8))
   
-  p2 <- grid.arrange(p, bottom = textGrob(expression("              Total Event Rainfall" (mm/hr^{-1})), gp=gpar(fontsize=11)), ncol=1)
-  
+  if (isTRUE(fdc)){
+    p2 <- grid.arrange(p, bottom = textGrob(expression("           % time flow equalled or exceeded"), gp=gpar(fontsize=11)), ncol=1)
+  }
+  else {
+    p2 <- grid.arrange(p, bottom = textGrob(expression("              Total Event Rainfall" (mm/hr^{-1})), gp=gpar(fontsize=11)), ncol=1)
+  }
   return(p2)
 }
 
@@ -464,22 +471,28 @@ ggsave("6_Event_Stats/Join_plots/Fig5.GLM4.jpg", plot = join.glm4.all ,width = 1
 
 # --------------- Q5 Q95 (Flashiness Ratios) -------------------------
 
-EB_full_flow <- read_rds('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds') %>%
+Read.Edit.Flow <- function(.filePath){
+  read_rds(.filePath) %>%
   mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
                                    ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
                                             datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No"))))%>%
-  filter(Beaver != "Unsure")
+  filter(Beaver != "Unsure") %>%
+    drop_na()
+}
+
+EB_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds')
+POP_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')
 
 
-# create Summary tibble
-Q5Q95.tab <- full_flow %>%
-  drop_na()%>%
+# create Summary tibbles
+Flow.Sum.Tab <- function(.data){
+  .data %>%
   group_by(Beaver) %>% 
   summarize(Mean = mean(q), Median = median(q), R2FDC = (log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33),
             Q5 = quantile(q, 0.95), Q95 = quantile(q, 0.05)) %>%
-  mutate(Beaver = c('Beaver Absent','Beaver Present'), `Q5:Q95 ratio` = Q5/Q95) %>%
-  rename(" " = Beaver) %>%
-  bind_rows(summarise(.," " = '% Change',
+  mutate(Beaver = c('No Beaver','Beaver'), `Q5:Q95 ratio` = Q5/Q95) %>%
+  rename(".Col" = Beaver) %>%
+  bind_rows(summarise(.,".Col" = '% Change',
                       Mean = (Mean[2]-Mean[1])/Mean[1]*100,
                       Median = (Median[2]-Median[1])/Median[1]*100,
                       R2FDC= (R2FDC[2]-R2FDC[1])/R2FDC[1]*100,
@@ -487,27 +500,50 @@ Q5Q95.tab <- full_flow %>%
                       Q95 = (Q95[2]-Q95[1])/Q95[1]*100,
                       `Q5:Q95 ratio` = (`Q5:Q95 ratio`[2]-`Q5:Q95 ratio`[1])/`Q5:Q95 ratio`[1]*100,))%>%
   mutate_at(vars(Mean, Median, R2FDC, Q5, Q95, `Q5:Q95 ratio`), round,3) 
+}
 
+EB_FlowSumTab <- Flow.Sum.Tab(EB_full_flow)
+POP_FlowSumTab <- Flow.Sum.Tab(POP_full_flow)
 
 # Creat table Grob for adding to flow duration curve plot
-g1 <- tableGrob(Q5Q95.tab, rows=NULL,
-                theme = ttheme_minimal(core = list(fg_params=list(cex = 0.8)),
-                                       colhead = list(fg_params=list(cex = 0.8)),
-                                       rowhead = list(fg_params=list(cex = 0.8)),
-                                       padding = unit(c(3,2),"mm")))
-g2 <- tableGrob(Q5Q95.tab, rows=NULL, 
-                cols=as.character(Q5Q95.tab[3, 1:7]),
-                theme = ttheme_minimal(core = list(fg_params=list(cex = 0.8)),
-                                       colhead = list(fg_params=list(cex = 0.8)),
-                                       rowhead = list(fg_params=list(cex = 0.8)),
-                                       padding = unit(c(3,2),"mm"))) 
+create.Tab.Grob <- function(tab, drop.c1){
+  if (isTRUE(drop.c1)){
+    tableb <- tab %>%
+      mutate(.Col = " ") %>%
+      rename(" " = .Col)
+    print(tableb)
+  } else {
+    
+    tableb <- tab %>%
+      rename(" " = .Col)
+  }
+  
+  g1 <- tableGrob(tableb, rows=NULL,
+                  theme = ttheme_minimal(core = list(fg_params=list(cex = 0.55)),
+                                         colhead = list(fg_params=list(cex = 0.55)),
+                                         rowhead = list(fg_params=list(cex = 0.55)),
+                                         padding = unit(c(1.5,1.5),"mm")))
+  g2 <- tableGrob(tableb, rows=NULL, 
+                  cols=as.character(tableb[3, 1:7]),
+                  theme = ttheme_minimal(core = list(fg_params=list(cex = 0.55)),
+                                         colhead = list(fg_params=list(cex = 0.55)),
+                                         rowhead = list(fg_params=list(cex = 0.55)),
+                                         padding = unit(c(1.5,1.5),"mm"))) 
+  
+  g3 <- rbind(g1[-nrow(g1), ], g2[1,]) 
+  
+  return(g3)
+  
+}
 
-FlowDur.tab <- rbind(g1[-nrow(g1), ], g2[1,])
-
+EB.Tab.Grob <- create.Tab.Grob(EB_FlowSumTab, drop.c1 = FALSE)
+POP.Tab.Grob <- create.Tab.Grob(POP_FlowSumTab, drop.c1 = TRUE)
 
 # ----------------- flow duration curves ------------------------
 
-NoBeavCurve <-  full_flow %>%
+plot.fdc <- function(.data, title){
+
+NoBeavCurve <-  .data %>%
   drop_na() %>%
   filter(Beaver == 'No')%>%
   select(q, Beaver) %>%
@@ -515,7 +551,7 @@ NoBeavCurve <-  full_flow %>%
   mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
 
 
-YesBeavCurve <-  full_flow %>%
+YesBeavCurve <-  .data %>%
   drop_na() %>%
   filter(Beaver == 'Yes')%>%
   select(q, Beaver) %>%
@@ -529,19 +565,20 @@ tail(BefAftCurve)
 
 FlowDur.plt <- ggplot(BefAftCurve, aes(x = pcntexceedance, y = q, colour=Beaver)) +
   geom_line() +
-  xlab ("% time flow equalled or exceeded") +
+  # xlab ("% time flow equalled or exceeded") +
   ylab(expression(Flow~(m^{3}~s^{-1})))+
   scale_x_continuous(labels = scales::percent) +
-  scale_y_log10() +
+  scale_y_log10(limits=c()) +
   geom_vline(xintercept=0.05, lwd = 0.5, linetype=3) +
-  annotate("text", x=0.08, label="Q5", y=1, size=3) +
+  annotate("text", x=0.1, label="Q5", y=1, size=3) +
   geom_vline(xintercept=0.95, lwd = 0.5, linetype=3) +
-  annotate("text", x=0.91, label="Q95", y=1, size=3) +
+  annotate("text", x=0.89, label="Q95", y=1, size=3) +
   annotation_logticks(sides = "l", colour='grey') +
   scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  ggtitle(title)+
   theme_bw()+
-  theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
-        axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
+  theme(axis.title.x = element_blank(),
+        plot.title = element_text(hjust = 0.5, size = 11),
         strip.text.x = element_text(size = 12, color = "black", face = "italic"),
         strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
         legend.position=c(.78,.87),
@@ -549,11 +586,22 @@ FlowDur.plt <- ggplot(BefAftCurve, aes(x = pcntexceedance, y = q, colour=Beaver)
         legend.title=element_text(size=10),
         panel.border = element_blank())
 
+return(FlowDur.plt)
 
-flow_dur.save <- grid.arrange(FlowDur.plt, FlowDur.tab,
-                              nrow=2,
-                              as.table=TRUE,
-                              heights=c(3,0.7))
+}
 
-ggsave("6_Event_Stats/plots/Fig9.FlowExCurve.jpg", plot = flow_dur.save, width = 15, height = 15, units = 'cm', dpi = 600)
+EB.fdc <-plot.fdc(EB_full_flow, "Budleigh Brook")
+POP.fdc <- plot.fdc(POP_full_flow, "Colaton Brook") +
+  theme(axis.title.y = element_blank())
+
+fdc.plots <- merge.plots(EB.fdc, POP.fdc, fdc=TRUE)
+
+
+fdc.tabs <- grid.arrange(EB.Tab.Grob, POP.Tab.Grob, nrow=1, widths = c(0.5,0.5))
+
+fdc.join.plot <- join.vert(fdc.plots, fdc.tabs)
+
+
+
+ggsave("6_Event_Stats/Join_plots/Fig6.FlowDurCurve.jpg", plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
 
