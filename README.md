@@ -14,3 +14,6 @@ GLM with Hydrological season as covariate. Shows attenuation occurs to a greater
 
 ![East Bud example3](6_Event_Stats/Join_plots/Fig4.GLM3.jpg)
 GLM fitted to subset of data where flow is larger than Q5 (i.e >95th percentile). Shows that attenuation persists even at high flows.
+
+![East Bud example3](6_Event_Stats/Join_plots/Fig6.FlowDurCurve.jpg)
+Flow duration curves for Budleigh Brook and Colaton Brook
