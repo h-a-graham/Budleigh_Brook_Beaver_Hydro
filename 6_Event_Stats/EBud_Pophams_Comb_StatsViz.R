@@ -3,19 +3,9 @@ options(scipen = 999)
 
 # ------------- Load Libraries ----------------------
 library(tidyverse)
-library(mgcv)
 library(lubridate)
-library(lme4)
-library(boot)
 library(broom)
-library(broom.mixed)
-library(tcltk)
-library(mgcv)
 library(ggfortify)
-library(GGally)
-library(patchwork)
-library(quantreg)
-library(ggpmisc)
 library(grid)
 library(gridExtra)
 library(performance)
@@ -340,7 +330,7 @@ ggsave("6_Event_Stats/Join_plots/Fig3.GLM2.jpg", plot = join.glm2.all ,width = 1
 
 # Budleigh Brook
 
-# Select all flow events with magnitude greater than Q2 (Flow exceeded 2% of the time)
+# Select all flow events with magnitude greater than Q5 (Flow exceeded 5% of the time)
 EB_big_storms <- EBUD_hyd_dat %>%
   filter(per_q < 5)
 
@@ -362,7 +352,7 @@ EB.m8.tidy <- add.stat.tab(EB_m8b)
 
 # Colaton Brook
 
-# Select all flow events with magnitude greater than Q2 (Flow exceeded 2% of the time)
+# Select all flow events with magnitude greater than Q5 (Flow exceeded 5% of the time)
 POP_big_storms <- POP_hyd_dat %>%
   filter(per_q < 5)
 
