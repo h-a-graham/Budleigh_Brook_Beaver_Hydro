@@ -3,8 +3,8 @@
 Workflow for the processing and analysis of hydrological data from East Budleigh EA gaug to evaluate the imapcts of Beaver on Flow regimes...
 
 And here's the rough result...
-![Bud Brook Location](7_Site_Location/exports/BudBrookLoc.jpg) 
-Location of Budeligh brook catchemnt, gauging station and Beaver dam sequence.
+![Bud Brook Location](7_Site_Location/exports/BudBrookHydroLoc.jpg) 
+Location of Budeligh brook Catchment Colaton Brook catchemnts, gauging station and Beaver dam sequence.
 
 ![East Bud example1](6_Event_Stats/Join_plots/Fig2.GLM1.jpg)  
 GLM showing flow attenuation post beaver when compared with control catchment. 
