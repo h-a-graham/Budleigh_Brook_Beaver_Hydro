@@ -45,3 +45,6 @@ vignettes/*.pdf
 5_event_extraction/eventExtraction__beaver/working
 5_event_extraction/eventExtraction__beaver/data
 5_event_extraction/eventExtraction__beaver/ARCHIVED
+7_Site_Location/QGIS
+7_Site_Location/data/River_Network
+7_Site_Location/data/mapping_vectors
