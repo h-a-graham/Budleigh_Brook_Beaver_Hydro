@@ -11,6 +11,7 @@ library(gridExtra)
 library(performance)
 library(glm2)
 library(ggpubr)
+library(emmeans)
 # ------------- Read Data ------------------------------
 EBUD_hyd_dat <- read_rds("./5_event_extraction/eventExtraction__beaver/EastBud/run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds")
 
@@ -149,6 +150,8 @@ autoplot(EB_m2b, which = 1:6, ncol = 3, label.size = 3)
 check_model(EB_m2b)
 
 
+
+
 EB_m2.ND <- Create_Data(.data=EBUD_hyd_datb, var='rain.tot.mm') %>%
   broom::augment(EB_m2b, type.predict = "response",
           type.residuals = "deviance",
@@ -252,6 +255,9 @@ join.glm1.all <- join.vert(join.glm1.plot, join.glm1.tab)
 
 ggsave("6_Event_Stats/Join_plots/Fig2.GLM1.jpg", plot = join.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
+tidy(emmeans(EB_m2b, ~Beaver))
+tidy(emmeans(POP_m2, ~Beaver))
+
 # ---------------- GLM with hydrological season -------------------------------------------
 
 #  Fit Regression - Budleigh Brook
@@ -325,6 +331,9 @@ join.glm2.all <- join.vert(join.glm2.plot, join.glm2.tab)
 
 ggsave("6_Event_Stats/Join_plots/Fig3.GLM2.jpg", plot = join.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
+
+tidy(emmeans(EB_m3b, ~Hydro.Seas * Beaver))
+tidy(emmeans(POP_m3b, ~Hydro.Seas * Beaver))
 
 # ---------------- GLM for high flow events --------------------------------
 
@@ -594,4 +603,85 @@ fdc.join.plot <- join.vert(fdc.plots, fdc.tabs)
 
 
 ggsave("6_Event_Stats/Join_plots/Fig6.FlowDurCurve.jpg", plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
+
+
+
+# ------------------ Direct comparison Control vs. Response. -----------------
+
+BB_events <- EBUD_hyd_dat %>%
+  mutate(site='BudBrook') %>%
+  select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, Beaver, Hydro.Seas, site)
+
+CB_evetns <- POP_hyd_dat %>%
+  mutate(site='ColBrook')%>%
+  select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, Beaver, Hydro.Seas, site)
+
+
+BB.CB.bind <- BB_events %>%
+  bind_rows(CB_evetns) %>%
+  mutate(site = fct_relevel(site, "ColBrook", "BudBrook"))
+
+# full model
+
+bind.mod <- glm2(Q.peak.m3.s ~ Beaver * site * Hydro.Seas + rain.tot.mm, data=BB.CB.bind, family = Gamma(link='identity'))
+bind.mod2 <- glm2(Q.peak.m3.s ~ Beaver * site * Hydro.Seas + rain.tot.mm, data=BB.CB.bind, family = Gamma(link='identity'), start = coef(bind.mod))
+bind.mod3 <- glm2(Q.peak.m3.s ~ Beaver * site * Hydro.Seas + rain.tot.mm , data=BB.CB.bind, family = Gamma(link='identity'), start = coef(bind.mod2))
+
+autoplot(bind.mod, which = 1:6, ncol = 3, label.size = 3)
+check_model(bind.mod3)
+summary(bind.mod3)
+
+bind.mod.aov <- aov(bind.mod3)
+summary(bind.mod.aov)
+
+bind.mod3 %>%
+  broom::augment(type.predict = "response",
+                 type.residuals = "deviance",
+                 se_fit = T) %>%
+  ggplot(aes(y=Q.peak.m3.s, x = rain.tot.mm, colour=Beaver))+
+  geom_point(alpha = 0.5, size=0.8)+
+  geom_line(aes(y = .fitted)) +
+  geom_ribbon(aes(y=.fitted, ymin = .fitted - (1.96 *.se.fit), ymax = .fitted + (1.96 *.se.fit)), 
+              alpha=0.2, linetype=2, lwd=0.2) +
+  scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+  coord_cartesian(ylim = c(0,5))+
+  facet_wrap(Hydro.Seas~site) +
+  theme_bw()
+
+
+tidy(emmeans(bind.mod3, ~Beaver * Hydro.Seas * site))
+
+#no season
+
+
+bind2.mod <- glm2(Q.peak.m3.s ~ Beaver * site + rain.tot.mm, data=BB.CB.bind, family = Gamma(link='identity'))
+bind2.mod2 <- glm2(Q.peak.m3.s ~ Beaver * site + rain.tot.mm, data=BB.CB.bind, family = Gamma(link='identity'), start = coef(bind.mod))
+
+autoplot(bind2.mod, which = 1:6, ncol = 3, label.size = 3)
+check_model(bind2.mod2)
+summary(bind2.mod2)
+
+bind2.mod.aov <- aov(bind2.mod2)
+summary(bind2.mod.aov)
+
+bind2.mod2 %>%
+  broom::augment(type.predict = "response",
+                 type.residuals = "deviance",
+                 se_fit = T) %>%
+  ggplot(aes(y=Q.peak.m3.s, x = rain.tot.mm, colour=Beaver))+
+  geom_point(alpha = 0.5, size=0.8)+
+  geom_line(aes(y = .fitted)) +
+  geom_ribbon(aes(y=.fitted, ymin = .fitted - (1.96 *.se.fit), ymax = .fitted + (1.96 *.se.fit)), 
+              alpha=0.2, linetype=2, lwd=0.2) +
+  scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+  coord_cartesian(ylim = c(0,5))+
+  facet_wrap(~site, ncol = 1) +
+  theme_bw()
+
+
+
+tidy(emmeans(bind2.mod2, ~Beaver * site))
+
 
