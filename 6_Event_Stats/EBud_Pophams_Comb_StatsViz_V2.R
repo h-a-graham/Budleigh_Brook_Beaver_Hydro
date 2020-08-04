@@ -121,7 +121,9 @@ BB.CB.bind <- BB_events %>%
 # ------- boxplot to show difference in Q max --------------------
 
 flowbox <- function(.data, yax) {
-  ggplot(.data, aes(x = Beaver, y=Q.peak.m3.s, fill = Beaver))+
+  .data %>%
+    mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
+    ggplot(., aes(x = Beaver, y=Q.peak.m3.s, fill = Beaver))+
     geom_point(shape = 21, alpha = 0.5,position = position_jitterdodge(), stroke = 0.1, size=0.9) +
     geom_boxplot(colour = "black", alpha = 0.3, outlier.shape = NA, width = 0.3, lwd=0.2) +
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
@@ -457,8 +459,9 @@ Joint.Flow <- EB_full_flow %>%
 
 #plot FDC
 plot.fdc <- function(.data){
-  
-  FlowDur.plt <- ggplot(.data, aes(x = pcntexceedance, y = q, colour=Beaver)) +
+  .data %>%
+    mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
+    ggplot(., aes(x = pcntexceedance, y = q, colour=Beaver)) +
     geom_line() +
     ylab(expression(Flow~(m^{3}~s^{-1})))+
     xlab('% time flow equalled or exceeded')+
@@ -479,8 +482,6 @@ plot.fdc <- function(.data){
           legend.background=element_blank(),
           legend.title=element_text(size=10),
           panel.border = element_blank())
-  
-  return(FlowDur.plt)
   
 }
 
