@@ -390,6 +390,45 @@ checkplot(Q.S.ts.df, '2015-11-05 00:00:00', '2015-11-11 00:00:00') # issues with
 #        height = 15,
 #        units = c("cm"))
 
+# ------ explain use of splines:
 
+rating_zoom_CP <- ggplot(Q.S.select, aes(x=stage, y=flow_ls)) +
+  geom_point(alpha=0.3, colour='#68BAF2') +
+  geom_line(data=pred_data, aes(y=flow_pred), linetype=1, lwd = 0.5, colour='#062E47') +
+  stat_smooth(method = 'nlsLM', formula = y ~ a * (x^b), se = FALSE, colour='red', lwd = 0.5, fullrange=T) +
+  coord_cartesian(xlim = c(0.515,0.63), ylim = c(0,1200)) +
+  scale_x_continuous(breaks = seq(0.3,0.65, by = 0.025)) +
+  scale_y_continuous(breaks = seq(0,1250, by = 250)) +
+  xlab('Depth at Weir (m)') +
+  ylab(expression("measured Flow   " (l/s^{-1}))) +
+  labs(title = 'Flow rating curve for Hayes Lane - Budleigh Brook',
+       subtitle = 'A comparison of piecewise-spline and Power regression')+
+  theme_bw() +
+  theme(axis.title.x=element_blank())
+rating_zoom_CP
 
+rating_wide_CP <- ggplot(Q.S.select, aes(x=stage, y=flow_ls)) +
+  geom_point(color='#68BAF2',alpha=0.5) +
+  geom_line(data=pred_data, aes(y=flow_pred, colour='piecewise spline'), linetype=1, lwd = 0.5) +
+  geom_smooth(aes(colour = 'power'), method = 'nlsLM', formula = y ~ a * (x^b), se = FALSE, lwd = 0.5, fullrange=T) +
+  geom_vline(xintercept = depth.zeroQ, linetype = 2) + # zero flow line.
+  annotate(geom = "text", x = depth.zeroQ - 0.01 , y = 5000, label = "depth at zero-flow", angle = 90) +
+  scale_x_continuous(limits = c(0.26,0.88),breaks = seq(0.26,0.88, by = 0.05)) +
+  scale_y_continuous(limits = c(0,20000), breaks = seq(0,20000, by = 5000)) +
+  scale_colour_manual(values = c('#062E47', 'red')) +
+  xlab('Depth at Weir (m)') +
+  ylab(expression("measured Flow   " (l/s^{-1}))) +
+  labs(caption=pw_eq_list)+
+  theme_bw() +
+  theme(plot.caption = element_text(hjust = 0, face= "italic"),
+        plot.caption.position = 'plot', 
+        legend.position = "bottom",
+        legend.title=element_blank())
 
+rating_zoom_CP /
+  rating_wide_CP 
+
+ggsave('./3_Stage_Q_rating/plots/Q_Stage_rating_compare.jpg',
+       width = 25,
+       height = 18,
+       units = c("cm"))

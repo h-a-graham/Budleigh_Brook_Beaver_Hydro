@@ -1,6 +1,6 @@
 # setwd('C:/HG_Projects/East_Bud_Hydrology_Proj')
-proj_root <- 'C:/HG_Projects/East_Bud_Hydrology_Proj'
-ev_extr_root <- 'C:/HG_Projects/East_Bud_Hydrology_Proj/5_event_extraction/eventExtraction__beaver'
+proj_root <- 'C:/HG_Projects/Budleigh_Brook_Beaver_Hydro'
+ev_extr_root <- 'C:/HG_Projects/Budleigh_Brook_Beaver_Hydro/5_event_extraction/eventExtraction__beaver'
 current_wd <- getwd()
 if (current_wd == proj_root) {
   print('Updating Working Directory...')
@@ -145,7 +145,7 @@ str(datetime)
 ## read in RDS file (opens a pop up)
 #dat <- readRDS(file.choose())
 
-dat <- readRDS('C:/HG_Projects/East_Bud_Hydrology_Proj/4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')
+dat <- readRDS('C:/HG_Projects/Budleigh_Brook_Beaver_Hydro/4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')
 
 #---- >*1.1 Data checks and setup ----------------------------------------------
 
@@ -2077,7 +2077,7 @@ p1 <-  ggplot(outputs) +
    ylab("Rainfall (mm/h)")+
    ylab (expression(Rainfall~(mm~h^{-1}))) +
    ylab("Rainfall intensity\n(mm h\u207B\u00B9)") +
-   scale_x_datetime(limits = c(xlim_min,xlim_max),                        # get the x axis limits previously set
+   scale_x_datetime(limits = c(ts1,tsn),                        # get the x axis limits previously set
                     date_labels = ("%Y-%m-%d\n%H:%M")) +
    scale_y_reverse(limits = c()) +
    theme_bw(base_size = 8) + theme(legend.key = element_blank(),
@@ -2095,7 +2095,7 @@ p1 <-  ggplot(outputs) +
    geom_line(aes(datetime, q_m3_s, colour = legnd[4], linetype =legnd[4])) +
    xlab ("Date") +
    ylab (expression(Flow~(m^{3}~s^{-1}))) +
-   scale_x_datetime(limits = c(xlim_min,xlim_max),                             # get the x axis limits previously set
+   scale_x_datetime(limits = c(ts1,tsn),                             # get the x axis limits previously set
                     date_labels = ("%Y-%m-%d\n%H:%M")) +
    scale_y_continuous(limits = c(0,ylimit2)) +
    theme_bw(base_size = 8) + theme(legend.key = element_blank(),
@@ -2112,10 +2112,9 @@ p1 <-  ggplot(outputs) +
 
 
  p <- plot_grid(p1, p2, nrow = 2, align = "v", rel_heights = c(0.5, 1.2))
- print(p)
+ # print(p)
 
- tiff(paste0("plots/ts_07_eventEx_rainrunoff_events_OUTPUT_",
-             sitename, "East Budleigh",
+ tiff(paste0("C:/HG_Projects/Budleigh_Brook_Beaver_Hydro/6_Event_Stats/Paper_plots/",sitename, '_TimeSeries_',
              format(head(outputs$datetime, 1),"%Y%m%d"), "_",
              format(tail(outputs$datetime, 1),"%Y%m%d"),".tiff"),
       width = 210, height = 100, units = 'mm', res = 600, compression = "zip") # to make squares

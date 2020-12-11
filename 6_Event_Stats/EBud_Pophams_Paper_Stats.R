@@ -109,7 +109,7 @@ BB_events <- EBUD_hyd_dat %>%
 
 CB_evetns <- POP_hyd_dat %>%
   mutate(Site='Colaton Brook (control)')%>%
-  select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, anti.rain.mm5d, per_q, Beaver, Hydro.Seas, Site)
+  select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, anti.rain.mm5d,per_q, Beaver, Hydro.Seas, Site)
 
 
 BB.CB.bind <- BB_events %>%
@@ -119,35 +119,35 @@ BB.CB.bind <- BB_events %>%
 
 
 # ------- boxplot to show difference in Q max --------------------
-
-flowbox <- function(.data, yax) {
-  .data %>%
-    mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
-    ggplot(., aes(x = Beaver, y=Q.peak.m3.s, fill = Beaver))+
-    geom_point(shape = 21, alpha = 0.5,position = position_jitterdodge(), stroke = 0.1, size=0.9) +
-    geom_boxplot(colour = "black", alpha = 0.3, outlier.shape = NA, width = 0.3, lwd=0.2) +
-    scale_color_manual(values = c('#A6190D', '#244ED3')) +
-    scale_fill_manual(values = c('#A6190D', '#244ED3')) +
-    ylab(yax)+
-    xlab('Beaver Present in Budleigh Brook') +
-    theme_bw() +
-    coord_cartesian(y=c(0,5))+
-    facet_wrap(~Site, ncol=2)+
-    theme(legend.position="none",
-          axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
-          axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
-          panel.border = element_blank(),
-          plot.title = element_text(hjust = 0.5),
-          strip.text.x = element_text(size = 12, color = "black", face = "italic"),
-          strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
-  
-}
-
-fb1 <- flowbox(BB.CB.bind, expression("Event Maximum Flow   " (m^{3}~s^{-1})))
-fb1
-
-
-ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.jpg", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
+# 
+# flowbox <- function(.data, yax) {
+#   .data %>%
+#     mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
+#     ggplot(., aes(x = Beaver, y=Q.peak.m3.s, fill = Beaver))+
+#     geom_point(shape = 21, alpha = 0.5,position = position_jitterdodge(), stroke = 0.1, size=0.9) +
+#     geom_boxplot(colour = "black", alpha = 0.3, outlier.shape = NA, width = 0.3, lwd=0.2) +
+#     scale_color_manual(values = c('#A6190D', '#244ED3')) +
+#     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+#     ylab(yax)+
+#     xlab('Beaver Present in Budleigh Brook') +
+#     theme_bw() +
+#     coord_cartesian(y=c(0,5))+
+#     facet_wrap(~Site, ncol=2)+
+#     theme(legend.position="none",
+#           axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
+#           axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
+#           panel.border = element_blank(),
+#           plot.title = element_text(hjust = 0.5),
+#           strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+#           strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
+#   
+# }
+# 
+# fb1 <- flowbox(BB.CB.bind, expression("Event Maximum Flow   " (m^{3}~s^{-1})))
+# fb1
+# 
+# 
+# ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.jpg", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
 
 
 # ----------------------- Fit Gamma (identity) Model --------------------------------
@@ -159,18 +159,13 @@ BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm + Beaver * Site , data= BB.CB.bind, 
 
 summary(BACI_m1b) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
 
-
 # Check Diagnostics
 autoplot(BACI_m1b, which = 1:6, ncol = 3, label.size = 3) #
-check_model(BACI_m1b, check='all') #
-
+check_model(BACI_m1b) #
 
 # Run Anaova on model (useful to compare means but not really what we're intersted in - here Beaver alone is significant.)
 BACI.aov1 <- aov(BACI_m1b)
 summary(BACI.aov1)
-
-summary(anova(BACI_m1b))
-car::Anova(BACI.aov1,type="3")
 
 # Create New data for predictions
 BACI.m1.ND <- Create_Data(.data=BB.CB.bind, var='rain.tot.mm') %>%
@@ -195,16 +190,14 @@ BACI.m1.tidy <- add.stat.tab(BACI_m1b)
 # Function to Create Tidy table of marginal means
 
 emmeans.tab <- function(.emmeans.obj){
-  tidy(.emmeans.obj, conf.int = TRUE) %>%
-    rename(`Lower CL` = "asymp.LCL") %>%
-    rename(`Upper CL` = "asymp.UCL") %>%
-    select(-df, -z.ratio, -p.value) %>%
-    mutate_at(vars(estimate, std.error, `Lower CL`, `Upper CL`), round,3)
-    
+  tidy(.emmeans.obj, conf.int=TRUE) %>%
+    select(-df, -asymp.LCL, -asymp.UCL, -z.ratio, -p.value) %>%
+    mutate_at(vars(estimate, std.error), round,3)
+  
 }
 
 BACI.emm.1 <- emmeans(BACI_m1b,  ~Beaver * Site)
-  
+
 BACI.mm1.tidy <- emmeans.tab(BACI.emm.1)
 
 
@@ -218,7 +211,7 @@ glm.plot <- function(.data, model.data) {
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     coord_cartesian(ylim=c(0,7))+
-    labs(y= (expression("Event Maximum Flow   " (m^{3}~s^{-1}))),
+    labs(y= (expression("Peak Q   " (m^{3}~s^{-1}))),
          x=expression("Total Event Rainfall   " (mm)),
          colour = "Beaver Present", 
          fill = "Beaver Present") +
@@ -226,7 +219,7 @@ glm.plot <- function(.data, model.data) {
     theme(plot.title = element_text(hjust = 0.5, size = 11),
           strip.text.x = element_text(size = 12, color = "black", face = "italic"),
           strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
-          legend.position = 'top')
+          legend.position = 'bottom')
 }
 
 
@@ -249,9 +242,9 @@ join.hori <- function(tab.1, tab.2, w1, w2, t1, t2) {
 
 join.vert <- function(.plot, .tab1, .tab2, w1, w2, t1, t2){
   grid.arrange(.plot, join.hori(.tab1, .tab2, w1, w2, t1, t2),
-                      nrow=2,
-                      as.table=TRUE,
-                      heights=c(3.5,1.5))
+               nrow=2,
+               as.table=TRUE,
+               heights=c(3.5,1.5))
 } 
 
 
@@ -259,10 +252,11 @@ join.vert <- function(.plot, .tab1, .tab2, w1, w2, t1, t2){
 BACI.glm1 <- glm.plot(BB.CB.bind, BACI.m1.ND) + 
   facet_wrap(~Site, ncol=2)
 
-BACI.glm1.all <- join.vert(BACI.glm1, BACI.m1.tidy, BACI.mm1.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+BACI.glm1.all <- join.vert(BACI.glm1, BACI.m1.tidy, BACI.mm1.tidy, 6.7, 5.6, 'Budleigh:Colaton Regression Summary', 'Marginal Means')
 
-ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.jpg", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
-ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.pdf", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 900)
+ggsave("6_Event_Stats/BACI_Plots/Paper_Fig7_GLM1.jpg", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+
+ggsave("6_Event_Stats/Paper_plots/Paper_Fig7_GLM1.pdf", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
 # ---------------- GLM with hydrological season -------------------------------------------
 
@@ -311,10 +305,11 @@ BACI.mm2.tidy <- emmeans.tab(BACI.emm.2)
 BACI.glm2 <- glm.plot(BB.CB.bind, BACI.m2.ND) + 
   facet_grid(Hydro.Seas ~ Site)
 
-BACI.glm2.all <- join.vert(BACI.glm2, BACI.m2.tidy, BACI.mm2.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+BACI.glm2.all <- join.vert(BACI.glm2, BACI.m2.tidy, BACI.mm2.tidy, 5.85, 4.7, 'Budleigh:Colaton Regression Summary', 'Marginal Means')
 
 
-ggsave("6_Event_Stats/BACI_Plots/Fig3.GLM2.jpg", plot = BACI.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Paper_Fig8_GLM2.jpg", plot = BACI.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/Paper_plots/Paper_Fig8_GLM2.pdf", plot = BACI.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
 
 # ---------------- GLM for high flow events --------------------------------
@@ -349,154 +344,11 @@ BACI.mm3.tidy <- emmeans.tab(BACI.emm.3)
 BACI.glm3 <- glm.plot(BB.CB_big_storms, BACI.m3.ND) + 
   facet_wrap(~ Site, ncol=2)
 
-BACI.glm3.all <- join.vert(BACI.glm3, BACI.m3.tidy, BACI.mm3.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+BACI.glm3.all <- join.vert(BACI.glm3, BACI.m3.tidy, BACI.mm3.tidy, 6.7, 5.6, 'Budleigh:Colaton Q5 Regression Summary', 'Marginal Means')
 
 
-ggsave("6_Event_Stats/BACI_Plots/Fig4.GLM3.jpg", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Paper_Fig9_GLM3.jpg", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
-# ------------------ GLM for high flows and wet antecedent conditions -----------------------------------
+ggsave("6_Event_Stats/Paper_plots/Paper_Fig9_GLM3.pdf", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
-# Select flow events with the wettest (top 25%) antecedent (5 days preceeding) condition and with a peak flow
-# with magnitude greater than Q5 (Flow exceeded 5% of the time)
-
-# Budleigh Brook
-
-BB.CB_Wet_Ante_df <- BB.CB_big_storms %>%
-  filter(anti.rain.mm5d > quantile(anti.rain.mm5d, .75))
-
-
-BACI_m4  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity')) # prelim model to get starting vals
-BACI_m4b  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity'), start = coef(BACI_m4)) # final model
-
-summary(BACI_m4b) 
-
-check_model(BACI_m4b)
-autoplot(BACI_m4b, which = 1:6, ncol = 3, label.size = 3)
-
-BACI.m4.ND <- Create_Data(.data=BB.CB_Wet_Ante_df, var='rain.tot.mm')%>%
-  broom::augment(BACI_m4b, type.predict = "response",
-                 type.residuals = "deviance",
-                 se_fit = T, newdata=.)
-
-BACI.m4.tidy <- add.stat.tab(BACI_m4b)
-
-BACI.emm.4 <- emmeans(BACI_m4b, ~Beaver * Site)
-
-BACI.mm4.tidy <- emmeans.tab(BACI.emm.4)
-
-# plotting
-
-BACI.glm4 <- glm.plot(BB.CB_Wet_Ante_df, BACI.m4.ND) + 
-  facet_wrap(~ Site, ncol=2)
-
-BACI.glm4.all <- join.vert(BACI.glm4, BACI.m4.tidy, BACI.mm4.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
-
-
-ggsave("6_Event_Stats/BACI_Plots/Fig5.GLM4.jpg", plot = BACI.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
-
-
-# --------------- Q5 Q95 (Flashiness Ratios) -------------------------
-
-Read.Edit.Flow <- function(.filePath){
-  read_rds(.filePath) %>%
-    mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
-                                     ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
-                                              datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No"))))%>%
-    filter(Beaver != "Unsure") %>%
-    drop_na()
-}
-
-EB_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds') %>%
-  mutate(Site = 'Budleigh Brook (impact)')
-POP_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds') %>%
-  mutate(Site = 'Colaton Brook (control)')
-
-
-
-# create Summary tibbles
-Flow.Sum.Tab <- function(.data){
-  .data %>%
-    group_by(Beaver) %>% 
-    summarize(Mean = mean(q), Median = median(q), R2FDC = (log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33),
-              Q5 = quantile(q, 0.95), Q95 = quantile(q, 0.05)) %>%
-    mutate(Beaver = c('No Beaver','Beaver'), `Q5:Q95 ratio` = Q5/Q95) %>%
-    rename(" " = Beaver) %>%
-    bind_rows(summarise(.," " = '% Change',
-                        Mean = (Mean[2]-Mean[1])/Mean[1]*100,
-                        Median = (Median[2]-Median[1])/Median[1]*100,
-                        R2FDC= (R2FDC[2]-R2FDC[1])/R2FDC[1]*100,
-                        Q5 = (Q5[2]-Q5[1])/Q5[1]*100,
-                        Q95 = (Q95[2]-Q95[1])/Q95[1]*100,
-                        `Q5:Q95 ratio` = (`Q5:Q95 ratio`[2]-`Q5:Q95 ratio`[1])/`Q5:Q95 ratio`[1]*100,))%>%
-    mutate_at(vars(Mean, Median, R2FDC, Q5, Q95, `Q5:Q95 ratio`), round,3) 
-}
-
-EB_FlowSumTab <- Flow.Sum.Tab(EB_full_flow)
-POP_FlowSumTab <- Flow.Sum.Tab(POP_full_flow)
-
-# ----------------- flow duration curves ------------------------
-
-# Create joint table for plotting
-calc.fdc <- function(.data){
-  NoBeavCurve <-  .data %>%
-    drop_na() %>%
-    filter(Beaver == 'No')%>%
-    select(q, Beaver, Site) %>%
-    arrange(desc(q)) %>%
-    mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
-  
-  
-  YesBeavCurve <-  .data %>%
-    drop_na() %>%
-    filter(Beaver == 'Yes')%>%
-    select(q, Beaver, Site) %>%
-    arrange(desc(q)) %>%
-    mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
-  
-  BefAftCurve <- bind_rows(NoBeavCurve, YesBeavCurve)
-}
-
-Joint.Flow <- EB_full_flow %>%
-  calc.fdc(.)%>%
-  bind_rows(calc.fdc(POP_full_flow)) %>%
-  mutate(Site = fct_relevel(Site, "Colaton Brook (control)", "Budleigh Brook (impact)")) 
-
-
-#plot FDC
-plot.fdc <- function(.data){
-  .data %>%
-    mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
-    ggplot(., aes(x = pcntexceedance, y = q, colour=Beaver)) +
-    geom_line() +
-    ylab(expression(Flow~(m^{3}~s^{-1})))+
-    xlab('% time flow equalled or exceeded')+
-    scale_x_continuous(labels = scales::percent) +
-    scale_y_log10(limits=c()) +
-    geom_vline(xintercept=0.05, lwd = 0.5, linetype=5, colour='grey50') +
-    annotate("text", x=0.1, label="Q5", y=1, size=3) +
-    geom_vline(xintercept=0.95, lwd = 0.5, linetype=5, colour='grey50') +
-    annotate("text", x=0.89, label="Q95", y=1, size=3) +
-    # annotation_logticks(sides = "l", colour='grey') +
-    scale_color_manual(values = c('#A6190D', '#244ED3')) +
-    facet_wrap(~Site) +
-    theme_bw()+
-    theme(strip.text.x = element_text(size = 12, color = "black", face = "italic"),
-          strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
-          axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
-          legend.position=c(.18,.87),
-          legend.background=element_blank(),
-          legend.title=element_text(size=10),
-          panel.border = element_blank())
-  
-}
-
-
-fdc.plots <- plot.fdc(Joint.Flow)
-
-
-fdc.join.plot <- join.vert(fdc.plots, EB_FlowSumTab, POP_FlowSumTab, 5.9, 5.9, 'Budliegh Brook Flow Summary', 'Colaton Brook Flow Summary' )
-
-
-
-ggsave("6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.jpg", plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
 
