@@ -19,7 +19,7 @@ cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver
 
 # ---------- Read Files function --------------
 # function to read the files
-read_event <- function(events_folder, event, id, max_steps){
+read_event <- function(events_folder, event, id){
   evFile <- file.path(events_folder, event) 
   
   evDf <- read_csv(evFile, col_types = cols()) %>%
@@ -30,10 +30,6 @@ read_event <- function(events_folder, event, id, max_steps){
     filter(`Beaver Present` != "Unsure") %>%
     select(q_m3_s, event_step, `Beaver Present`) 
   
-  if (nrow(evDf)>max_steps){
-    evDf <- evDf[1:max_steps,]
-    # stop('Event > max Yes')
-  }
   
   max_eventStep <- max(evDf$event_step)
   Beaver_pres <- evDf$`Beaver Present`[1]
@@ -64,38 +60,56 @@ safe_loess <- function(evf, x, id, pb, ms){
 
 # -------------- main function to map the functions to each row ---------------
 #map function to file list and join
-df_overlay <- function(events_folder, max_steps){
+df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL){
   
+
   event_path_list = list.files(events_folder)
   
   pb <- progress::progress_bar$new(total = length(event_path_list), clear = FALSE)
   
   events_combined <- event_path_list %>%
-    purrr::imap(., ~ safe_loess(events_folder, .x, .y, pb, max_steps)) %>%
+    purrr::imap(., ~ safe_loess(events_folder, .x, .y, pb)) %>%
     purrr::map(., purrr::pluck, "result") %>%
     Filter(Negate(anyNA), .) %>%
     bind_rows() %>%
     mutate(event_step = event_step/4)
+  
+  if (is.null(maxhrs)){
+    maxhrs <- quantile(events_combined$event_step[events_combined$`Beaver Present` == 'Yes'], probs = c(perc_cutoff))
+  } 
+  
+  events_combined <- events_combined %>%
+    filter(event_step < maxhrs)
+  
 }
   
 # --------------- Function to plot event overlays -----------------------
 
-plot_overlay <- function(.data){
+plot_overlay <- function(.data, se=TRUE){
+  
   p <- ggplot(.data, aes(x=event_step, y=q_m3_s , group=event_id, colour=`Beaver Present`, fill=`Beaver Present`)) +
-    geom_line(alpha=0.1, lwd=0.6) +
-    # geom_smooth(method="loess", aes(group=`Beaver Present`), se=F, span=0.3, lwd=1.1, alpha=0.7) +
-    geom_smooth(method="loess", aes(y=q_m3_s, group=`Beaver Present`), colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.8) +
-    # geom_smooth(method = "lm", formula = y ~ poly(x, 3, raw = TRUE), 
-    #             aes(y=q_m3_s, group=`Beaver Present`),
-    #             colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.8) +
+    geom_line(alpha=0.1, lwd=0.4) +
     scale_y_log10(
       breaks = scales::trans_breaks("log10", function(x) 10^x),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(x = 'time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
-    scale_color_manual(values = c('#A6190D', '#244ED3'),) +
-    scale_fill_manual(values = c('#A6190D', '#244ED3'),) +
+    scale_color_manual(values = c('#A6190D', '#244ED3')) +
+    scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     theme_bw() + 
     annotation_logticks(sides='l') 
+  
+  if (isTRUE(se)){
+    # Loess option
+    p <- p +  geom_smooth(method="loess", aes(y=q_m3_s, group=`Beaver Present`), colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.9)
+    
+    # Polynomial if preferred...
+    # p <- p + geom_smooth(method = "lm", formula = y ~ poly(x, 5, raw = TRUE),
+    #               aes(y=q_m3_s, group=`Beaver Present`),
+    #               colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.8)
+  } else {
+    p = p + geom_smooth(method="loess", aes(group=`Beaver Present`), se=F, span=0.3, lwd=1.1, alpha=0.9)
+      
+  }
   
   return(p)
   
@@ -103,19 +117,22 @@ plot_overlay <- function(.data){
 
 # --------- Run the functions ----------------
 
-bb <- df_overlay(events_folder=bb_events_folder, 192) %>%
+bb <- df_overlay(events_folder=bb_events_folder) %>%
   mutate(Site = 'Budleigh Brook (impact)')
 
-cb <- df_overlay(events_folder=cb_events_folder, 192)%>%
+# bb$event_step[bb$`Beaver Present` == 'Yes']
+
+cb_cutoff <- max(bb$event_step)
+
+cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
   mutate(Site = 'Colaton Brook (control)')
 
 
 # ----------- Create combined plot for control vs impact ---------------
 combine_sites <- bind_rows(bb, cb) %>%
-  plot_overlay() +
-  facet_wrap(~ Site) +
-  theme(legend.position="none",
-        axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
+  plot_overlay(., se=T) +  # for faster plotting set se=FALSE
+  facet_wrap(~ Site, ncol=2) +
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
         # panel.border = element_blank(),
         plot.title = element_text(hjust = 0.5),
@@ -123,5 +140,15 @@ combine_sites <- bind_rows(bb, cb) %>%
         strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
 
 # ------------------------- save image ----------------------------------
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_facet_loess.jpg')
+# combine_sites
+out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Loess.jpg')
 ggsave(filename = out_path,plot = combine_sites, dpi=300)
+
+# 
+# p <- bb %>% group_by(event_step) %>%
+#   summarise(count = n())
+# 
+# ggplot(data=p, aes(x = event_step, y=count)) +
+#   geom_line(colour = '#048099', stat='identity') +
+#   theme_light()
+# quantile(bb$event_step, probs = c(0.95))

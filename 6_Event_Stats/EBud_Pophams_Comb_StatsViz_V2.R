@@ -15,15 +15,17 @@ library(emmeans)
 library(gt)
 library(png)
 # ------------- Read Data ------------------------------
-EBUD_hyd_dat1 <- read_rds("./5_event_extraction/eventExtraction__beaver/EastBud/run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds")
+EBUD_hyd_dat1 <- read_rds(file.path(here::here(),"5_event_extraction/eventExtraction__beaver/EastBud/",
+                                    "run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds"))
 
-EBUD_all_flow <- read_rds('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds') %>% # reload flow inout for calculating correct Excedence...
+EBUD_all_flow <- read_rds(file.path(here::here(),'4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds')) %>% # reload flow inout for calculating correct Excedence...
   select(q) %>%
   drop_na()
 
-POP_hyd_dat1 <- read_rds("./5_event_extraction/eventExtraction__beaver/Pophams/run_20200710_1222_value__padding2880_alpha0.98_passes3_BFI0.74/eventEx_EVENTS_metrics.rds")
+POP_hyd_dat1 <- read_rds(file.path(here::here(), "5_event_extraction/eventExtraction__beaver/Pophams/",
+                                   "run_20200710_1222_value__padding2880_alpha0.98_passes3_BFI0.74/eventEx_EVENTS_metrics.rds"))
 
-POP_all_flow <- read_rds('4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds') %>% # reload flow inout for calculating correct Excedence...
+POP_all_flow <- read_rds(file.path(here::here(),'4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')) %>% # reload flow inout for calculating correct Excedence...
   select(q) %>%
   drop_na()
 
@@ -406,9 +408,9 @@ Read.Edit.Flow <- function(.filePath){
     drop_na()
 }
 
-EB_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds') %>%
+EB_full_flow <- Read.Edit.Flow(file.path(here::here(),'4_Join_Rain_to_Q/exports/EastBud_Q_R_S_ts.rds')) %>%
   mutate(Site = 'Budleigh Brook (impact)')
-POP_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds') %>%
+POP_full_flow <- Read.Edit.Flow(file.path(here::here(),'4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')) %>%
   mutate(Site = 'Colaton Brook (control)')
 
 
@@ -417,7 +419,7 @@ POP_full_flow <- Read.Edit.Flow('4_Join_Rain_to_Q/exports/Pophams_Q_R_S_ts.rds')
 Flow.Sum.Tab <- function(.data){
   .data %>%
     group_by(Beaver) %>% 
-    summarize(Mean = mean(q), Median = median(q), R2FDC = (log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33),
+    summarize(Mean = mean(q), Median = median(q), R2FDC = ((log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33))*-1,
               Q5 = quantile(q, 0.95), Q95 = quantile(q, 0.05)) %>%
     mutate(Beaver = c('No Beaver','Beaver'), `Q5:Q95 ratio` = Q5/Q95) %>%
     rename(" " = Beaver) %>%
@@ -498,5 +500,5 @@ fdc.join.plot <- join.vert(fdc.plots, EB_FlowSumTab, POP_FlowSumTab, 5.9, 5.9, '
 
 
 
-ggsave("6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.jpg", plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave(file.path(here::here(),"6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.jpg"), plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
 
