@@ -149,6 +149,26 @@ fb1 <- flowbox(BB.CB.bind, expression("Event Maximum Flow   " (m^{3}~s^{-1})))
 fb1
 
 
+print_sum_stats <- function(.data){
+  message(.data$Site[1])
+  message(.data$Beaver[1])
+  message(median(.data$Q.peak.m3.s, na.rm=T))
+  message(IQR(.data$Q.peak.m3.s, na.rm=T))
+
+}
+
+BB.CB.bind %>%
+  group_by(Site, Beaver) %>%
+  group_split() %>%
+  purrr::map(., ~print_sum_stats(.))
+
+
+
+
+
+
+
+
 ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.jpg", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
 
 

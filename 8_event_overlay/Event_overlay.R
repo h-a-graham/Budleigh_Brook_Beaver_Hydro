@@ -5,30 +5,28 @@ library(here)
 library(broom)
 library(patchwork)
 
-# ----------------- define data folders --------------------------------
-# Set root folder containing event csv files
-#BB Events
-bb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/EastBud',
-                           'run_20201002_1454_value__padding2880_alpha0.98_passes3_BFI0.814/final_event_windows')
-
-#CB Events
-cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/Pophams',
-                              'run_20201002_1643_value__padding2880_alpha0.98_passes3_BFI0.74/final_event_windows')
-
-
 
 # ---------- Read Files function --------------
 # function to read the files
-read_event <- function(events_folder, event, id){
+read_event <- function(events_folder, event, id, beaver_time){
   evFile <- file.path(events_folder, event) 
   
-  evDf <- read_csv(evFile, col_types = cols()) %>%
-    mutate(event_step = row_number()) %>%
-    mutate(`Beaver Present` = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
-                                     ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
-                                              datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No")))) %>%
-    filter(`Beaver Present` != "Unsure") %>%
-    select(q_m3_s, event_step, `Beaver Present`) 
+  
+  if (is.null(beaver_time)){
+    evDf <- read_csv(evFile, col_types = cols()) %>%
+      mutate(event_step = row_number()) %>%
+      mutate(`Beaver Present` = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
+                                                 ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
+                                                          datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No")))) %>%
+      filter(`Beaver Present` != "Unsure") %>%
+      select(q_m3_s, event_step, `Beaver Present`)
+  } else {
+    evDf <- read_csv(evFile, col_types = cols()) %>%
+      mutate(event_step = row_number()) %>%
+      mutate(`Beaver Present` = as.factor(ifelse(datetime > as.POSIXct(beaver_time, "%Y-%m-%d %H:%M", tz = "UTC"), "Yes", "No"))) %>%
+      select(q_m3_s, event_step, `Beaver Present`)
+  }
+ 
   
   
   max_eventStep <- max(evDf$event_step)
@@ -48,11 +46,9 @@ read_event <- function(events_folder, event, id){
     
 }
 
-
-
 # -------- safely read data function -------------
-safe_loess <- function(evf, x, id, pb, ms){
-  f  = purrr::safely(function() read_event(evf, x, id, ms), otherwise = NA)
+safe_loess <- function(evf, x, id, pb, beaver_time){
+  f  = purrr::safely(function() read_event(evf, x, id, beaver_time), otherwise = NA)
   pb$tick()
   f()
 }
@@ -60,7 +56,9 @@ safe_loess <- function(evf, x, id, pb, ms){
 
 # -------------- main function to map the functions to each row ---------------
 #map function to file list and join
-df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL){
+# beaver time = NULL defaults to Budleigh Brook beaver timings - use "2017-01-01 00:00" type sting for custom timings.
+
+df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_time=NULL){
   
 
   event_path_list = list.files(events_folder)
@@ -68,7 +66,7 @@ df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL){
   pb <- progress::progress_bar$new(total = length(event_path_list), clear = FALSE)
   
   events_combined <- event_path_list %>%
-    purrr::imap(., ~ safe_loess(events_folder, .x, .y, pb)) %>%
+    purrr::imap(., ~ safe_loess(events_folder, .x, .y, pb, beaver_time)) %>%
     purrr::map(., purrr::pluck, "result") %>%
     Filter(Negate(anyNA), .) %>%
     bind_rows() %>%
@@ -115,12 +113,21 @@ plot_overlay <- function(.data, se=TRUE){
   
 }
 
+# ----------------- define data folders --------------------------------
+# Set root folder containing event csv files
+#BB Events
+bb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/EastBud',
+                              'run_20201002_1454_value__padding2880_alpha0.98_passes3_BFI0.814/final_event_windows')
+
+#CB Events
+cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/Pophams',
+                              'run_20201002_1643_value__padding2880_alpha0.98_passes3_BFI0.74/final_event_windows')
+
+
 # --------- Run the functions ----------------
 
 bb <- df_overlay(events_folder=bb_events_folder) %>%
   mutate(Site = 'Budleigh Brook (impact)')
-
-# bb$event_step[bb$`Beaver Present` == 'Yes']
 
 cb_cutoff <- max(bb$event_step)
 
@@ -128,9 +135,13 @@ cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
   mutate(Site = 'Colaton Brook (control)')
 
 
+# bb <- df_overlay(events_folder=bb_events_folder, beaver_time = "2019-01-01 00:00") %>%
+#   mutate(Site = 'Budleigh Brook (impact)')
+
+
 # ----------- Create combined plot for control vs impact ---------------
 combine_sites <- bind_rows(bb, cb) %>%
-  plot_overlay(., se=T) +  # for faster plotting set se=FALSE
+  plot_overlay(., se=F) +  # for faster plotting set se=FALSE
   facet_wrap(~ Site, ncol=2) +
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
@@ -145,10 +156,4 @@ out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Loess.jpg'
 ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
-# p <- bb %>% group_by(event_step) %>%
-#   summarise(count = n())
-# 
-# ggplot(data=p, aes(x = event_step, y=count)) +
-#   geom_line(colour = '#048099', stat='identity') +
-#   theme_light()
-# quantile(bb$event_step, probs = c(0.95))
+
