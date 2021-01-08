@@ -179,7 +179,7 @@ combine_sites <- bind_rows(bb, cb) %>%
 
 # ------------------------- save image ----------------------------------
 # combine_sites
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_GAM.jpg')
+out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
 ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
