@@ -4,6 +4,7 @@ library(tidyverse)
 library(here)
 library(broom)
 library(patchwork)
+library(mgcv)
 
 
 # ---------- Read Files function --------------
@@ -15,43 +16,60 @@ read_event <- function(events_folder, event, id, beaver_time){
   if (is.null(beaver_time)){
     evDf <- read_csv(evFile, col_types = cols()) %>%
       mutate(event_step = row_number()) %>%
-      mutate(`Beaver Present` = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
-                                                 ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
-                                                          datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No")))) %>%
-      filter(`Beaver Present` != "Unsure") %>%
-      select(q_m3_s, event_step, `Beaver Present`)
+      mutate(beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Yes",
+                                       ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
+                                                datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No")))) %>%
+      filter(beaver != "Unsure") %>%
+      select(q_m3_s, event_step, beaver) %>%
+      mutate(event_id = as.factor(id)) 
   } else {
     evDf <- read_csv(evFile, col_types = cols()) %>%
       mutate(event_step = row_number()) %>%
-      mutate(`Beaver Present` = as.factor(ifelse(datetime > as.POSIXct(beaver_time, "%Y-%m-%d %H:%M", tz = "UTC"), "Yes", "No"))) %>%
-      select(q_m3_s, event_step, `Beaver Present`)
+      mutate(beaver = as.factor(ifelse(datetime > as.POSIXct(beaver_time, "%Y-%m-%d %H:%M", tz = "UTC"), "Yes", "No"))) %>%
+      select(q_m3_s, event_step, beaver) %>%
+      mutate(event_id = as.factor(id)) 
   }
- 
   
   
-  max_eventStep <- max(evDf$event_step)
-  Beaver_pres <- evDf$`Beaver Present`[1]
   
-  Q_loess <- loess(q_m3_s ~ event_step, evDf, control=loess.control(surface="direct"), span=0.1)
+  # max_eventStep <- max(evDf$event_step)
+  # Beaver_pres <- evDf$beaver[1]
+  # 
+  # Q_loess <- loess(q_m3_s ~ event_step, evDf, control=loess.control(surface="direct"), span=0.1)
   
   # new_NoBeavWet.BB <- tibble(event_step=seq(0, max_eventStep, length=max_eventStep*10), 
   #                            Beaver=Beaver_pres, Site = 'Budleigh Brook (impact)') %>%
-  new_NoBeavWet.BB <- evDf  %>%
-  broom::augment(Q_loess, type.predict = "response",
-                   type.residuals = "deviance",
-                   se_fit = F, data=.) %>%
-    mutate(event_id = as.factor(id)) 
-
-  return(new_NoBeavWet.BB)
-    
+  # new_NoBeavWet.BB <- evDf  %>%
+  #   broom::augment(Q_loess, type.predict = "response",
+  #                  type.residuals = "deviance",
+  #                  se_fit = F, data=.) %>%
+  #   mutate(event_id = as.factor(id)) 
+  
+  return(evDf)
+  
 }
 
 # -------- safely read data function -------------
-safe_loess <- function(evf, x, id, pb, beaver_time){
+safe_read <- function(evf, x, id, pb, beaver_time){
   f  = purrr::safely(function() read_event(evf, x, id, beaver_time), otherwise = NA)
   pb$tick()
   f()
 }
+
+# function to fit gam and return full dataframe
+gam_func <- function(.data) {
+  gam1 <- gam(q_m3_s ~ s(event_step, by=beaver, bs='cs') + beaver,
+              method = "REML", data = .data) 
+  
+  df <- broom::augment(gam1) %>%
+    bind_cols(select(.data, event_id), .) %>%
+    rename_with(., starts_with("."), .fn = ~(paste0("gam", .)))
+  
+  # return(list(gam1, df))
+  return(df)
+  
+}
+
 
 
 # -------------- main function to map the functions to each row ---------------
@@ -60,32 +78,34 @@ safe_loess <- function(evf, x, id, pb, beaver_time){
 
 df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_time=NULL){
   
-
+  
   event_path_list = list.files(events_folder)
   
   pb <- progress::progress_bar$new(total = length(event_path_list), clear = FALSE)
   
   events_combined <- event_path_list %>%
-    purrr::imap(., ~ safe_loess(events_folder, .x, .y, pb, beaver_time)) %>%
+    purrr::imap(., ~ safe_read(events_folder, .x, .y, pb, beaver_time)) %>%
     purrr::map(., purrr::pluck, "result") %>%
     Filter(Negate(anyNA), .) %>%
     bind_rows() %>%
-    mutate(event_step = event_step/4)
+    mutate(event_step = event_step/4) 
+
   
   if (is.null(maxhrs)){
-    maxhrs <- quantile(events_combined$event_step[events_combined$`Beaver Present` == 'Yes'], probs = c(perc_cutoff))
+    maxhrs <- quantile(events_combined$event_step[events_combined$beaver == 'Yes'], probs = c(perc_cutoff))
   } 
   
   events_combined <- events_combined %>%
-    filter(event_step < maxhrs)
+    filter(event_step < maxhrs) %>%
+    gam_func(.) 
   
 }
-  
+
 # --------------- Function to plot event overlays -----------------------
 
-plot_overlay <- function(.data, se=TRUE){
+plot_overlay <- function(.data, se=TRUE, method='gam'){
   
-  p <- ggplot(.data, aes(x=event_step, y=q_m3_s , group=event_id, colour=`Beaver Present`, fill=`Beaver Present`)) +
+  p <- ggplot(.data, aes(x=event_step, y=q_m3_s , group=event_id, colour=beaver, fill=beaver)) +
     geom_line(alpha=0.1, lwd=0.4) +
     scale_y_log10(
       breaks = scales::trans_breaks("log10", function(x) 10^x),
@@ -94,19 +114,25 @@ plot_overlay <- function(.data, se=TRUE){
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     theme_bw() + 
-    annotation_logticks(sides='l') 
+    annotation_logticks(sides='l')+
+    labs(color='Beaver Present', fill='Beaver Present') 
   
-  if (isTRUE(se)){
-    # Loess option
-    p <- p +  geom_smooth(method="loess", aes(y=q_m3_s, group=`Beaver Present`), colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.9)
-    
-    # Polynomial if preferred...
-    # p <- p + geom_smooth(method = "lm", formula = y ~ poly(x, 5, raw = TRUE),
-    #               aes(y=q_m3_s, group=`Beaver Present`),
-    #               colour=NA,  se=T, span=0.3, lwd=1.1, alpha=0.8)
+  if (method =='gam'){
+    if (isTRUE(se)){
+      p <- p + geom_ribbon(aes(x=event_step, ymin = gam.fitted - (gam.se.fit*1.96), 
+                               ymax = gam.fitted + (gam.se.fit*1.96), colour=beaver,
+                               fill=beaver),lwd=0.7, alpha=0.7, inherit.aes = F)
+    } else {
+      p <- p + geom_line(aes(y=gam.fitted),lwd=1.1, alpha=0.9)
+    }
   } else {
-    p = p + geom_smooth(method="loess", aes(group=`Beaver Present`), se=F, span=0.3, lwd=1.1, alpha=0.9)
-      
+    # Loess/other option
+    if (isTRUE(se)){
+      p <- p +  geom_smooth(method=method, aes(y=q_m3_s, group=beaver), colour=NA,  se=se, span=0.3, lwd=0.7, alpha=0.9)
+    } else{
+      p <- p +  geom_smooth(method=method, aes(y=q_m3_s, group=beaver), se=se, span=0.3, lwd=0.7, alpha=0.9)
+    }
+    
   }
   
   return(p)
@@ -127,12 +153,12 @@ cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver
 # --------- Run the functions ----------------
 
 bb <- df_overlay(events_folder=bb_events_folder) %>%
-  mutate(Site = 'Budleigh Brook (impact)')
+  mutate(Site = as.factor('Budleigh Brook (impact)'))
 
 cb_cutoff <- max(bb$event_step)
 
 cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
-  mutate(Site = 'Colaton Brook (control)')
+  mutate(Site = as.factor('Colaton Brook (control)'))
 
 
 # bb <- df_overlay(events_folder=bb_events_folder, beaver_time = "2019-01-01 00:00") %>%
@@ -141,7 +167,7 @@ cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
 
 # ----------- Create combined plot for control vs impact ---------------
 combine_sites <- bind_rows(bb, cb) %>%
-  plot_overlay(., se=F) +  # for faster plotting set se=FALSE
+  plot_overlay(., se=T, method = 'gam') +  # for faster plotting set se=FALSE
   facet_wrap(~ Site, ncol=2) +
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
@@ -150,10 +176,77 @@ combine_sites <- bind_rows(bb, cb) %>%
         strip.text.x = element_text(size = 12, color = "black", face = "italic"),
         strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
 
+
 # ------------------------- save image ----------------------------------
 # combine_sites
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Loess.jpg')
+out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_GAM.jpg')
 ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
+
+
+
+#  The Future --------------------------
+# qunatile appraoch ---------------- Very experimental!!!
+# This disn't get very far because I couldn't get things working with interactive variables.
+#has milage and will probeably require a quantred or qgam appraoch...
+# library(quantreg)
+# 
+# 
+# .rqss_mapper <- function(.data, .quant){
+#   
+#   # Run model
+#   m <-rqss(q_m3_s ~ qss(event_step), lambda=0.5, tau = .quant, data = .data)
+#   
+#   #generate augment df
+#   new_dat <- .data %>%
+#     dplyr::select(q_m3_s, event_step, beaver)
+#   
+#   pred_tib <- .data %>%
+#     select(event_step, beaver)%>%
+#     bind_cols(., predict.rqss(m, newdata = new_dat)) %>%
+#     rename(.rqss.fit = 3) %>%
+#     mutate(.tau = .quant)
+#   
+#   
+#   # return(pred_tib)
+# }
+# 
+# 
+# tid_rqss <- function(.data, Q.list = c(0.1, 0.5, 0.75)) {
+#   get_quants <- Q.list %>%
+#     purrr::map(., ~.rqss_mapper(.data, .)) %>%
+#     bind_rows() #%>%
+#   # bind_cols(., .data) 
+# }
+# 
+# 
+# 
+# t1 <- tid_rqss(bb)
+# 
+# 
+# ggplot(t1, aes(x=event_step, y=.rqss.fit , colour=beaver, fill=beaver)) +
+#   geom_line() +
+#   facet_wrap(~.tau)
+# 
+# 
+# geom_line(mapping = aes( y=q_01),alpha=0.1, lwd=1) +
+#   geom_line(mapping = aes( y=q_05),alpha=0.1, lwd=1) +
+#   geom_line(mapping = aes( y=q_075),alpha=0.1, lwd=1) +
+#   
+#   scale_y_log10(
+#     breaks = scales::trans_breaks("log10", function(x) 10^x),
+#     labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+#   labs(x = 'time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
+#   scale_color_manual(values = c('#A6190D', '#244ED3')) +
+#   scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+#   theme_bw() + 
+#   annotation_logticks(sides='l') 
+# 
+# ggplot(bb, aes(x=event_step, y=q_m3_s , colour=beaver, fill=beaver)) +
+#   geom_smooth(method = 'gam')
+#   
+#   
+# # wait but GAMS
+# library(qgam); library(mgcv)
 

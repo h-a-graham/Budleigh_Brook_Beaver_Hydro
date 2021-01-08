@@ -182,6 +182,16 @@ BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm + Beaver * Site , data= BB.CB.bind, 
 summary(BACI_m1b) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
 
 
+#interactive test
+
+# Fit regression
+# BACI_m1 <- glm2(Q.peak.m3.s ~ rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) # prelim run to get starting vals
+# 
+# BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1)) # final model
+# 
+# summary(BACI_m1b)
+
+
 # Check Diagnostics
 autoplot(BACI_m1b, which = 1:6, ncol = 3, label.size = 3) #
 check_model(BACI_m1b, check='all') #
