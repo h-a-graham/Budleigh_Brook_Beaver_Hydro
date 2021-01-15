@@ -4,7 +4,7 @@ library(tidyverse)
 library(here)
 library(broom)
 library(patchwork)
-library(mgcv)
+library(gam)
 
 
 # ---------- Read Files function --------------
@@ -20,17 +20,25 @@ read_event <- function(events_folder, event, id, beaver_time){
                                        ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
                                                 datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "No")))) %>%
       filter(beaver != "Unsure") %>%
-      select(q_m3_s, event_step, beaver) %>%
-      mutate(event_id = as.factor(id)) 
+      mutate(tot_rain = sum(rainfall_mm_h)/4) %>%
+      mutate(s_flow = pluck(q_m3_s, 1)) %>%
+      # mutate(q_m3_s = q_m3_s**(1/(tot_rain))) %>%
+      select(q_m3_s, tot_rain, event_step, beaver, s_flow) %>%
+      mutate(event_id = as.factor(id))  
+    
   } else {
     evDf <- read_csv(evFile, col_types = cols()) %>%
       mutate(event_step = row_number()) %>%
       mutate(beaver = as.factor(ifelse(datetime > as.POSIXct(beaver_time, "%Y-%m-%d %H:%M", tz = "UTC"), "Yes", "No"))) %>%
-      select(q_m3_s, event_step, beaver) %>%
+      mutate(tot_rain = sum(rainfall_mm_h)/(max(event_step)/4)) %>%
+      select(q_m3_s, event_step, beaver, tot_rain) %>%
       mutate(event_id = as.factor(id)) 
   }
   
-  
+  read_csv(evFile, col_types = cols()) %>%
+    mutate(event_step = row_number()) %>%
+    select(event_step, q_m3_s) %>%
+    mutate(s_flow = pluck(q_m3_s, 1))
   
   # max_eventStep <- max(evDf$event_step)
   # Beaver_pres <- evDf$beaver[1]
@@ -58,12 +66,30 @@ safe_read <- function(evf, x, id, pb, beaver_time){
 
 # function to fit gam and return full dataframe
 gam_func <- function(.data) {
-  gam1 <- gam(q_m3_s ~ s(event_step, by=beaver, bs='cs') + beaver,
-              method = "REML", data = .data) 
+  
+  gam1 <- mgcv::gam(q_m3_s ~ s(event_step, by=beaver, bs='cs') + beaver,
+              method = "REML", data = .data)
   
   df <- broom::augment(gam1) %>%
-    bind_cols(select(.data, event_id), .) %>%
+    bind_cols(select(.data, event_id, tot_rain, s_flow), .) %>%
     rename_with(., starts_with("."), .fn = ~(paste0("gam", .)))
+  
+  # gam.lo=gam(q_m3_s~ s(event_step, df=7) * beaver,
+  #            data=.data)
+  # gam.lo=gam(q_m3_s~ lo(event_step,by=beaver, df=7) * tot_rain * s_flow,
+  #            data=.data)
+  # 
+  # gam.lo=gam(q_m3_s ~ lo(event_step, by=beaver),
+  #            data=.data)
+  # plot(gam.lo)
+  
+  # preds <- predict(gam.lo, se.fit=TRUE)
+  # 
+  # df <- .data %>%
+  #   mutate(gam.fitted = preds[[1]]) %>%
+  #   mutate(gam.se.fit = preds[[2]])
+  
+  
   
   # return(list(gam1, df))
   return(df)
@@ -89,7 +115,7 @@ df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_
     Filter(Negate(anyNA), .) %>%
     bind_rows() %>%
     mutate(event_step = event_step/4) 
-
+  
   
   if (is.null(maxhrs)){
     maxhrs <- quantile(events_combined$event_step[events_combined$beaver == 'Yes'], probs = c(perc_cutoff))
@@ -139,114 +165,141 @@ plot_overlay <- function(.data, se=TRUE, method='gam'){
   
 }
 
-# ----------------- define data folders --------------------------------
-# Set root folder containing event csv files
-#BB Events
-bb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/EastBud',
-                              'run_20201002_1454_value__padding2880_alpha0.98_passes3_BFI0.814/final_event_windows')
-
-#CB Events
-cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/Pophams',
-                              'run_20201002_1643_value__padding2880_alpha0.98_passes3_BFI0.74/final_event_windows')
 
 
-# --------- Run the functions ----------------
+# ----------
 
-bb <- df_overlay(events_folder=bb_events_folder) %>%
-  mutate(Site = as.factor('Budleigh Brook (impact)'))
-
-cb_cutoff <- max(bb$event_step)
-
-cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
-  mutate(Site = as.factor('Colaton Brook (control)'))
-
-
-# bb <- df_overlay(events_folder=bb_events_folder, beaver_time = "2019-01-01 00:00") %>%
-#   mutate(Site = 'Budleigh Brook (impact)')
-
-
-# ----------- Create combined plot for control vs impact ---------------
-combine_sites <- bind_rows(bb, cb) %>%
-  plot_overlay(., se=T, method = 'gam') +  # for faster plotting set se=FALSE
-  facet_wrap(~ Site, ncol=2) +
-  theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
-        axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
-        # panel.border = element_blank(),
-        plot.title = element_text(hjust = 0.5),
-        strip.text.x = element_text(size = 12, color = "black", face = "italic"),
-        strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
+df_from_gam <- function(mod, offset){ 
+  gen_tibble <- function(.data){
+    event_step <- .data$x 
+    .fitted <- .data$fit + offset
+    .se <- .data$se
+    lab <- .data$ylab
+    tibble(event_step,.fitted , .se, lab)
+  }
+  
+  gam_smooth_df <- plot(mod, pages = 1, seWithMean = TRUE, shift=offset) %>%
+    purrr::map(., ~gen_tibble(.)) %>%
+    bind_rows() %>%
+    mutate(lab = fct_rev(lab)) %>%
+    mutate(beaver = sub('.*:beaver', '', lab))
+  
+  return(gam_smooth_df)
+  
+}
 
 
-# ------------------------- save image ----------------------------------
-# combine_sites
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
-ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
+
+
+# # ----------------- define data folders --------------------------------
+# # Set root folder containing event csv files
+# #BB Events
+# bb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/EastBud',
+#                               'run_20201002_1454_value__padding2880_alpha0.98_passes3_BFI0.814/final_event_windows')
 # 
-
-
-
-#  The Future --------------------------
-# qunatile appraoch ---------------- Very experimental!!!
-# This disn't get very far because I couldn't get things working with interactive variables.
-#has milage and will probeably require a quantred or qgam appraoch...
-# library(quantreg)
+# #CB Events
+# cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver/Pophams',
+#                               'run_20201002_1643_value__padding2880_alpha0.98_passes3_BFI0.74/final_event_windows')
 # 
 # 
-# .rqss_mapper <- function(.data, .quant){
-#   
-#   # Run model
-#   m <-rqss(q_m3_s ~ qss(event_step), lambda=0.5, tau = .quant, data = .data)
-#   
-#   #generate augment df
-#   new_dat <- .data %>%
-#     dplyr::select(q_m3_s, event_step, beaver)
-#   
-#   pred_tib <- .data %>%
-#     select(event_step, beaver)%>%
-#     bind_cols(., predict.rqss(m, newdata = new_dat)) %>%
-#     rename(.rqss.fit = 3) %>%
-#     mutate(.tau = .quant)
-#   
-#   
-#   # return(pred_tib)
-# }
+# # --------- Run the functions ----------------
+# 
+# bb <- df_overlay(events_folder=bb_events_folder) %>%
+#   mutate(Site = as.factor('Budleigh Brook (impact)'))
+# 
+# cb_cutoff <- max(bb$event_step)
+# 
+# cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
+#   mutate(Site = as.factor('Colaton Brook (control)'))
 # 
 # 
-# tid_rqss <- function(.data, Q.list = c(0.1, 0.5, 0.75)) {
-#   get_quants <- Q.list %>%
-#     purrr::map(., ~.rqss_mapper(.data, .)) %>%
-#     bind_rows() #%>%
-#   # bind_cols(., .data) 
-# }
+# # bb <- df_overlay(events_folder=bb_events_folder, beaver_time = "2019-01-01 00:00") %>%
+# #   mutate(Site = 'Budleigh Brook (impact)')
+# 
+# 
+# # ----------- Create combined plot for control vs impact ---------------
+# combine_sites <- bind_rows(bb, cb) %>%
+#   plot_overlay(., se=T, method = 'gam') +  # for faster plotting set se=FALSE
+#   facet_wrap(~ Site, ncol=2) +
+#   theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
+#         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
+#         # panel.border = element_blank(),
+#         plot.title = element_text(hjust = 0.5),
+#         strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+#         strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
+# 
+# 
+# # ------------------------- save image ----------------------------------
+# # combine_sites
+# out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
+# ggsave(filename = out_path,plot = combine_sites, dpi=300)
+# 
+# # 
 # 
 # 
 # 
-# t1 <- tid_rqss(bb)
-# 
-# 
-# ggplot(t1, aes(x=event_step, y=.rqss.fit , colour=beaver, fill=beaver)) +
-#   geom_line() +
-#   facet_wrap(~.tau)
-# 
-# 
-# geom_line(mapping = aes( y=q_01),alpha=0.1, lwd=1) +
-#   geom_line(mapping = aes( y=q_05),alpha=0.1, lwd=1) +
-#   geom_line(mapping = aes( y=q_075),alpha=0.1, lwd=1) +
-#   
-#   scale_y_log10(
-#     breaks = scales::trans_breaks("log10", function(x) 10^x),
-#     labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-#   labs(x = 'time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
-#   scale_color_manual(values = c('#A6190D', '#244ED3')) +
-#   scale_fill_manual(values = c('#A6190D', '#244ED3')) +
-#   theme_bw() + 
-#   annotation_logticks(sides='l') 
-# 
-# ggplot(bb, aes(x=event_step, y=q_m3_s , colour=beaver, fill=beaver)) +
-#   geom_smooth(method = 'gam')
-#   
-#   
-# # wait but GAMS
-# library(qgam); library(mgcv)
+# #  The Future --------------------------
+# # qunatile appraoch ---------------- Very experimental!!!
+# # This disn't get very far because I couldn't get things working with interactive variables.
+# #has milage and will probeably require a quantred or qgam appraoch...
+# # library(quantreg)
+# # 
+# # 
+# # .rqss_mapper <- function(.data, .quant){
+# #   
+# #   # Run model
+# #   m <-rqss(q_m3_s ~ qss(event_step), lambda=0.5, tau = .quant, data = .data)
+# #   
+# #   #generate augment df
+# #   new_dat <- .data %>%
+# #     dplyr::select(q_m3_s, event_step, beaver)
+# #   
+# #   pred_tib <- .data %>%
+# #     select(event_step, beaver)%>%
+# #     bind_cols(., predict.rqss(m, newdata = new_dat)) %>%
+# #     rename(.rqss.fit = 3) %>%
+# #     mutate(.tau = .quant)
+# #   
+# #   
+# #   # return(pred_tib)
+# # }
+# # 
+# # 
+# # tid_rqss <- function(.data, Q.list = c(0.1, 0.5, 0.75)) {
+# #   get_quants <- Q.list %>%
+# #     purrr::map(., ~.rqss_mapper(.data, .)) %>%
+# #     bind_rows() #%>%
+# #   # bind_cols(., .data) 
+# # }
+# # 
+# # 
+# # 
+# # t1 <- tid_rqss(bb)
+# # 
+# # 
+# # ggplot(t1, aes(x=event_step, y=.rqss.fit , colour=beaver, fill=beaver)) +
+# #   geom_line() +
+# #   facet_wrap(~.tau)
+# # 
+# # 
+# # geom_line(mapping = aes( y=q_01),alpha=0.1, lwd=1) +
+# #   geom_line(mapping = aes( y=q_05),alpha=0.1, lwd=1) +
+# #   geom_line(mapping = aes( y=q_075),alpha=0.1, lwd=1) +
+# #   
+# #   scale_y_log10(
+# #     breaks = scales::trans_breaks("log10", function(x) 10^x),
+# #     labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+# #   labs(x = 'time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
+# #   scale_color_manual(values = c('#A6190D', '#244ED3')) +
+# #   scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+# #   theme_bw() + 
+# #   annotation_logticks(sides='l') 
+# # 
+# # ggplot(bb, aes(x=event_step, y=q_m3_s , colour=beaver, fill=beaver)) +
+# #   geom_smooth(method = 'gam')
+# #   
+# #   
+# # # wait but GAMS
+# # library(qgam); library(mgcv)
 
