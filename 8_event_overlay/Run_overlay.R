@@ -1,3 +1,5 @@
+library(ggforce)
+library(patchwork)
 
 # optional sourcing version (not needed as the main script is stand alone..)
 source(file.path(here::here(), '8_event_overlay/Event_overlay.R'))
@@ -29,7 +31,7 @@ cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
 
 # ----------- Create combined plot for control vs impact ---------------
 combine_sites <- bind_rows(bb, cb) %>%
-  plot_overlay(., se=T, method = 'gam') +  # for faster plotting set se=FALSE
+  plot_overlay(., se=T, method = 'gam', ticks = FALSE) +  # for faster plotting set se=FALSE
   facet_wrap(~ Site, ncol=2) +
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
@@ -42,18 +44,71 @@ combine_sites <- bind_rows(bb, cb) %>%
 # # ------------------------- save image ----------------------------------
 combine_sites
 out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
-ggsave(filename = out_path,plot = combine_sites, dpi=300)
+# ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
 
 
-alt_plot <- combine_sites +
-  scale_y_continuous()+
-  coord_cartesian(ylim=c(0,1)) 
-alt_plot
-
+# alt_plot <- combine_sites +
+#   scale_y_continuous()+
+#   coord_cartesian(ylim=c(0,0.5)) +
+#   theme(
+#     strip.background = element_blank(),
+#     strip.text.x = element_blank()
+#   )
+# alt_plot
 out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam_NoTrans.jpg')
-ggsave(filename = out_path,plot = alt_plot, dpi=300)
+# ggsave(filename = out_path,plot = alt_plot, dpi=300)
+
+# ---- plotting rainfall -----------------------
+
+comb <- bind_rows(bb, cb)
+
+p1 <- ggplot(comb, aes(x=event_step, y=.fitted_rain , colour=beaver, fill=beaver)) +
+  geom_point(aes(y=rainfall_mm_h),alpha=0.01, lwd=0.4) +
+  # geom_line(lwd=1.1, alpha=0.4) +
+  geom_ribbon(aes(x=event_step, ymin = .fitted_rain - (.se.fit_rain*1.96),
+                  ymax = .fitted_rain + (.se.fit_rain*1.96), colour=beaver,
+                  fill=beaver),lwd=0.5, alpha=0.5, inherit.aes = F) +
+  # scale_y_log10(breaks = scales::trans_breaks("log10", function(x) 10^x),
+  #                    labels = scales::trans_format("log10", scales::math_format(10^.x)))+
+  labs(x = 'time since event start (hrs)', y= (expression('Rainfall   ' (mm/hr^{-1})))) +
+  scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+  theme_bw() + 
+  # annotation_logticks(sides='l')+
+  labs(color='Beaver Present', fill='Beaver Present') +
+  # coord_cartesian(y=c(limits = c(0, 1)))+
+  facet_wrap(~Site) +
+  guides(fill=F, colour=F)+
+  scale_y_reverse(limits = c(1, 0),labels = scales::number_format(accuracy = 0.1)) +
+  theme(axis.title.x=element_blank(),
+              axis.text.x=element_blank(),
+              axis.ticks.x=element_blank(), 
+        strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+        strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3))
+
+
+p2 <- combine_sites +
+  scale_y_continuous() +
+  coord_cartesian(y=c(limits = c(0, 0.4)))+
+  theme(
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    legend.position="bottom") +
+    annotation_logticks(
+    short = unit(0,"mm"),
+    mid = unit(0,"mm"),
+    long = unit(0,"mm")
+  )
+
+
+rain_FlowPlot <- p1/p2 + plot_layout(heights = c(1, 2))
+
+rain_FlowPlot_path <- file.path(here(), '8_event_overlay/exports', 'FlowRainOverlayNOTRANSrev.jpg')
+ggsave(filename = rain_FlowPlot_path,plot = rain_FlowPlot, 
+       width = 13, height = 16, units = 'cm', dpi = 300)
+  
 
 
 # ---------- predictive GAM appraoch with multiple variables --------------

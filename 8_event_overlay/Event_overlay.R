@@ -23,7 +23,7 @@ read_event <- function(events_folder, event, id, beaver_time){
       mutate(tot_rain = sum(rainfall_mm_h)/4) %>%
       mutate(s_flow = pluck(q_m3_s, 1)) %>%
       # mutate(q_m3_s = q_m3_s**(1/(tot_rain))) %>%
-      select(q_m3_s, tot_rain, event_step, beaver, s_flow) %>%
+      select(q_m3_s, tot_rain, event_step, beaver, s_flow, rainfall_mm_h) %>%
       mutate(event_id = as.factor(id))  
     
   } else {
@@ -31,14 +31,14 @@ read_event <- function(events_folder, event, id, beaver_time){
       mutate(event_step = row_number()) %>%
       mutate(beaver = as.factor(ifelse(datetime > as.POSIXct(beaver_time, "%Y-%m-%d %H:%M", tz = "UTC"), "Yes", "No"))) %>%
       mutate(tot_rain = sum(rainfall_mm_h)/(max(event_step)/4)) %>%
-      select(q_m3_s, event_step, beaver, tot_rain) %>%
+      select(q_m3_s, event_step, beaver, tot_rain, rainfall_mm_h) %>%
       mutate(event_id = as.factor(id)) 
   }
   
-  read_csv(evFile, col_types = cols()) %>%
-    mutate(event_step = row_number()) %>%
-    select(event_step, q_m3_s) %>%
-    mutate(s_flow = pluck(q_m3_s, 1))
+  # read_csv(evFile, col_types = cols()) %>%
+  #   mutate(event_step = row_number()) %>%
+  #   select(event_step, q_m3_s) %>%
+  #   mutate(s_flow = pluck(q_m3_s, 1))
   
   # max_eventStep <- max(evDf$event_step)
   # Beaver_pres <- evDf$beaver[1]
@@ -68,11 +68,19 @@ safe_read <- function(evf, x, id, pb, beaver_time){
 gam_func <- function(.data) {
   
   gam1 <- mgcv::gam(q_m3_s ~ s(event_step, by=beaver, bs='cs') + beaver,
-              method = "REML", data = .data)
-  
-  df <- broom::augment(gam1) %>%
-    bind_cols(select(.data, event_id, tot_rain, s_flow), .) %>%
+              method = "REML", data = .data) %>%
+    broom::augment() %>%
     rename_with(., starts_with("."), .fn = ~(paste0("gam", .)))
+  
+  gam2 <- mgcv::gam(rainfall_mm_h ~ s(event_step, by=beaver, bs='cs') + beaver,
+                    method = "REML", data = .data) %>%
+    broom::augment() %>%
+    select(-c(rainfall_mm_h, beaver, event_step)) %>%
+    rename_all(., ~paste0(., "_rain"))
+  
+  df <- gam1 %>%
+    bind_cols(select(.data, event_id, tot_rain, s_flow, rainfall_mm_h), ., gam2) 
+    
   
   # gam.lo=gam(q_m3_s~ s(event_step, df=7) * beaver,
   #            data=.data)
@@ -129,10 +137,10 @@ df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_
 
 # --------------- Function to plot event overlays -----------------------
 
-plot_overlay <- function(.data, se=TRUE, method='gam'){
+plot_overlay <- function(.data, se=TRUE, method='gam', ticks= TRUE){
   
   p <- ggplot(.data, aes(x=event_step, y=q_m3_s , group=event_id, colour=beaver, fill=beaver)) +
-    geom_line(alpha=0.1, lwd=0.4) +
+    geom_line(alpha=0.05, lwd=0.4) +
     scale_y_log10(
       breaks = scales::trans_breaks("log10", function(x) 10^x),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
@@ -140,8 +148,11 @@ plot_overlay <- function(.data, se=TRUE, method='gam'){
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     theme_bw() + 
-    annotation_logticks(sides='l')+
     labs(color='Beaver Present', fill='Beaver Present') 
+  
+  if (isTRUE(ticks)){
+    p <- p + annotation_logticks(sides='l')
+  }
   
   if (method =='gam'){
     if (isTRUE(se)){
