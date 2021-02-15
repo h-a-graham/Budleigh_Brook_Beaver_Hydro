@@ -18,5 +18,5 @@ GLM fitted to subset of data where flow is larger than Q5 (i.e >95th percentile)
 ![East Bud example4](6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.jpg)
 Flow duration curves for Budleigh Brook and Colaton Brook
 
-![East Bud example5](8_event_overlay/exports/FlowOverlay_Gam.jpg)
+![East Bud example5](8_event_overlay/exports/FlowRainOverlayNOTRANSrev.jpg)
 All events overlayed with a loess smoother
