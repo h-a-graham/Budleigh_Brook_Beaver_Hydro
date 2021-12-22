@@ -159,6 +159,11 @@ BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm + Beaver * Site , data= BB.CB.bind, 
 
 summary(BACI_m1b) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
 
+#interaction - kind of a nope...
+# BACI_m1_int <- glm2(Q.peak.m3.s ~ rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'))
+# BACI_m1_int2 <- glm2(Q.peak.m3.s ~  rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1_int))
+# autoplot(BACI_m1_int2, which = 1:6, ncol = 3, label.size = 3)
+# check_model(BACI_m1_int2)
 # Check Diagnostics
 autoplot(BACI_m1b, which = 1:6, ncol = 3, label.size = 3) #
 check_model(BACI_m1b) #
@@ -351,4 +356,54 @@ ggsave("6_Event_Stats/BACI_Plots/Paper_Fig9_GLM3.jpg", plot = BACI.glm3.all ,wid
 
 ggsave("6_Event_Stats/Paper_plots/Paper_Fig9_GLM3.pdf", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
+# ----------  GAM to understand more complex relationship? - Issues still arising due to small flow events. -----
+# I don't know if this is a useful model or not?!
+library(gam)
+library(mgcv)
+gam1d <- gam(Q.peak.m3.s ~ s(rain.tot.mm, by= Beaver, bs='cs', k=10) + s(rain.tot.mm, by= Site, bs='cs', k=10), 
+             method = "REML", data = BB.CB.bind)
 
+plot(gam1d, pages = 1, all.terms = TRUE, shade=TRUE, shade.col = "lightblue", shift = coef(gam1d)[1])
+
+summary(gam1d)
+
+layout(matrix(1:4, ncol = 2, byrow = TRUE))
+gam.check(gam1d)
+layout(1)
+
+concurvity(gam1d, full = TRUE)
+
+gam_df <- gam1d %>% 
+  augment() %>%
+  mutate(.fitted.shift = .fitted - coef(gam1d)[1])
+
+gam_df %>%
+  ggplot(aes(x=.fitted, y=.resid))+
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = 2) +
+  geom_smooth(method = "loess")
+
+
+ggplot(BB.CB.bind, aes(x = rain.tot.mm, y = Q.peak.m3.s, colour = Beaver, fill = Beaver)) +
+  
+  geom_point(alpha = 0.5, size=0.8) +
+  geom_line(data = gam_df, aes(y=.fitted))+
+  geom_ribbon(data = gam_df, aes(y=.fitted, ymin = .fitted - (1.96 *.se.fit), ymax = .fitted + (1.96 *.se.fit)), 
+              alpha=0.2, linetype=2, lwd=0.2)+
+  # coord_cartesian(ylim = c(0,11), xlim = c(0,1.5))+
+  
+  scale_color_manual(values = c('#A6190D', '#244ED3')) +
+  scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+  labs(x = (expression("Mean Rainfall Rate  " (mm/hr^{-1}))),
+       y= (expression("Event Maximum Flow   " (m^{3}~s^{-1}))),
+       colour = "Beaver Present", fill = "Beaver Present") +
+  theme_bw()+
+  theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
+        panel.border = element_blank(),
+        legend.position=c(.14,.85),
+        legend.background=element_blank(),
+        legend.title=element_text(size=10)) +
+facet_wrap(~Site)
+
+ggsave("6_Event_Stats/plots/Fig2.QMax_meanRain_GAM.jpg", width = 15, height = 15, units = 'cm', dpi = 600)

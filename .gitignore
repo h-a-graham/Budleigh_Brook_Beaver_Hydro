@@ -49,3 +49,6 @@ vignettes/*.pdf
 7_Site_Location/data/River_Network
 7_Site_Location/data/mapping_vectors
 8_event_overlay/exports/SS
+
+#unwanted file extensions
+*.7z

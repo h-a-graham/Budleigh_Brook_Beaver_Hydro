@@ -30,8 +30,18 @@ cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
 
 
 # ----------- Create combined plot for control vs impact ---------------
-combine_sites <- bind_rows(bb, cb) %>%
+sites_bind <- bind_rows(bb, cb)
+
+PeakQ.df <- sites_bind %>%
+  group_by(Site, beaver) %>%
+  summarise(PredQMax = max(gam.fitted),
+            PredQMaxTime = event_step[which.max(gam.fitted)])
+
+combine_sites <- sites_bind %>%
   plot_overlay(., se=T, method = 'gam', ticks = FALSE) +  # for faster plotting set se=FALSE
+  geom_point(data=PeakQ.df, aes(x=PredQMaxTime, y=PredQMax, group=NULL, pch='Average Event Peak Q'), colour='black')+
+  scale_shape_manual(values=4, name=NULL)+
+  guides(fill = guide_legend(override.aes = list(shape = NA))) +
   facet_wrap(~ Site, ncol=2) +
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
         axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
@@ -43,7 +53,7 @@ combine_sites <- bind_rows(bb, cb) %>%
 
 # # ------------------------- save image ----------------------------------
 combine_sites
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
+out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.png')
 # ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
@@ -57,7 +67,7 @@ out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.jpg')
 #     strip.text.x = element_blank()
 #   )
 # alt_plot
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam_NoTrans.jpg')
+out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam_NoTrans.png')
 # ggsave(filename = out_path,plot = alt_plot, dpi=300)
 
 # ---- plotting rainfall -----------------------
@@ -105,7 +115,7 @@ p2 <- combine_sites +
 
 rain_FlowPlot <- p1/p2 + plot_layout(heights = c(1, 2))
 
-rain_FlowPlot_path <- file.path(here(), '8_event_overlay/exports', 'FlowRainOverlayNOTRANSrev.jpg')
+rain_FlowPlot_path <- file.path(here(), '8_event_overlay/exports', 'FlowRainOverlayNOTRANSrev.png')
 ggsave(filename = rain_FlowPlot_path,plot = rain_FlowPlot, 
        width = 13, height = 16, units = 'cm', dpi = 300)
   
