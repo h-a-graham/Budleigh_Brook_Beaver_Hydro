@@ -15,6 +15,7 @@ library(emmeans)
 library(gt)
 library(png)
 library(gtable)
+library(patchwork)
 # ------------- Read Data ------------------------------
 EBUD_hyd_dat1 <- read_rds(file.path(here::here(),"5_event_extraction/eventExtraction__beaver/EastBud/",
                                     "run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds"))
@@ -37,7 +38,7 @@ POP_all_flow <- read_rds(file.path(here::here(),'4_Join_Rain_to_Q/exports/Popham
 
 # Create New Data for predictions
 
-Create_Data <- function(.data, vari, NoBeav.min, NoBeav.max, YesBeav.min, YesBeav.max, ...){
+Create_Data <- function(.data, vari, NoBeav.min, NoBeav.max, YesBeav.min, YesBeav.max, l =100){
   if(missing(NoBeav.min)) {
     NoBeav.min <- .data %>% filter(Beaver == 'No') %>% select(!!vari) %>% mutate_all(~(ifelse(is.na(.), 0, .))) %>% min()}
   if(missing(NoBeav.max)) { 
@@ -47,14 +48,14 @@ Create_Data <- function(.data, vari, NoBeav.min, NoBeav.max, YesBeav.min, YesBea
   if(missing(YesBeav.max)) {
     YesBeav.max <- .data %>% filter(Beaver == 'Yes') %>% select(!!vari) %>% mutate_all(~(ifelse(is.na(.), 0, .))) %>% max()}
   
-  new_NoBeavWet.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=100), Beaver='No', Hydro.Seas = 'Wet', Site = 'Budleigh Brook (impact)')
-  new_NoBeavDry.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=100), Beaver='No', Hydro.Seas = 'Dry', Site = 'Budleigh Brook (impact)')
-  new_NoBeavWet.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=100), Beaver='No', Hydro.Seas = 'Wet', Site = 'Colaton Brook (control)')
-  new_NoBeavDry.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=100), Beaver='No', Hydro.Seas = 'Dry', Site = 'Colaton Brook (control)')
-  new_YesBeavWet.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=100), Beaver = 'Yes', Hydro.Seas = 'Wet', Site = 'Budleigh Brook (impact)')
-  new_YesBeavDry.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=100), Beaver = 'Yes', Hydro.Seas = 'Dry', Site = 'Budleigh Brook (impact)')
-  new_YesBeavWet.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=100), Beaver = 'Yes', Hydro.Seas = 'Wet', Site = 'Colaton Brook (control)')
-  new_YesBeavDry.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=100), Beaver = 'Yes', Hydro.Seas = 'Dry', Site = 'Colaton Brook (control)')
+  new_NoBeavWet.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), Beaver='No', Hydro.Seas = 'Wet', Site = 'Budleigh Brook (impact)')
+  new_NoBeavDry.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), Beaver='No', Hydro.Seas = 'Dry', Site = 'Budleigh Brook (impact)')
+  new_NoBeavWet.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), Beaver='No', Hydro.Seas = 'Wet', Site = 'Colaton Brook (control)')
+  new_NoBeavDry.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), Beaver='No', Hydro.Seas = 'Dry', Site = 'Colaton Brook (control)')
+  new_YesBeavWet.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), Beaver = 'Yes', Hydro.Seas = 'Wet', Site = 'Budleigh Brook (impact)')
+  new_YesBeavDry.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), Beaver = 'Yes', Hydro.Seas = 'Dry', Site = 'Budleigh Brook (impact)')
+  new_YesBeavWet.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), Beaver = 'Yes', Hydro.Seas = 'Wet', Site = 'Colaton Brook (control)')
+  new_YesBeavDry.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), Beaver = 'Yes', Hydro.Seas = 'Dry', Site = 'Colaton Brook (control)')
   
   df <- bind_rows(new_NoBeavWet.BB, new_NoBeavDry.BB, new_NoBeavWet.CB, new_NoBeavDry.CB, 
                   new_YesBeavWet.BB, new_YesBeavDry.BB, new_YesBeavWet.CB, new_YesBeavDry.CB)%>%
@@ -77,11 +78,17 @@ makes_preds <- function(.model, .name, df, ...) {
 # Function to Create Tidy table of marginal means
 
 # plotting...
-glm.plot <- function(.data, model.data, .y) {
+glm.plot <- function(.data, model.data, .y, line=TRUE) {
+
   .y <- enquo(.y)
-  ggplot(model.data, aes(x=rain.tot.mm, y=!!.y, colour=Beaver, fill=Beaver))+
-    geom_point(data=.data, alpha = 0.4, size=0.8)+
-    geom_line(aes(x=rain.tot.mm, y = .fitted)) +
+  
+  p <- ggplot(model.data, aes(x=rain.tot.mm, y=!!.y, colour=Beaver, fill=Beaver))+
+    geom_point(data=.data, alpha = 0.4, size=0.8)
+  
+  if (isTRUE(lines)) {
+    p <- p + geom_line(aes(x=rain.tot.mm, y = .fitted))
+  }
+  p +
     geom_ribbon(aes(y=.fitted, ymin = .fitted - (1.96 *.se.fit), ymax = .fitted + (1.96 *.se.fit)), 
                 alpha=0.2, linetype=2, lwd=0.2) +
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
@@ -94,10 +101,23 @@ glm.plot <- function(.data, model.data, .y) {
     theme_bw() +
     theme(plot.title = element_text(hjust = 0.5, size = 11),
           strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+          strip.text.y = element_text(size = 7, color = "black", face = "italic"),
           strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
           legend.position = 'top')
 }
 
+val.plot.dir <- '6_Event_Stats/ModelValidation'
+if (!dir.exists(val.plot.dir)) dir.create(val.plot.dir)
+
+check_model_title <- function(.model, mod.num, .title){
+  pp <- check_model(.model)
+  p <- plot(pp) 
+  p <- p + plot_annotation(title=.title)
+  
+  fname <- file.path(val.plot.dir, paste0(sprintf('Model%s_',mod.num),.title, '.png'))
+  ggsave(fname, p)
+  
+} 
 
 pretty.tab <- function(model.tab, title){
   model.tab %>%
@@ -156,13 +176,13 @@ BB_events <- EBUD_hyd_dat %>%
   mutate(Site='Budleigh Brook (impact)') %>%
   select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, anti.rain.mm5d, 
          per_q, Beaver, Hydro.Seas, Site, rain.mean, event.Q.tot.m3, 
-         event.quickflow.tot.m3)
+         event.quickflow.tot.m3,anti.rain.mm5d)
 
 CB_evetns <- POP_hyd_dat %>%
   mutate(Site='Colaton Brook (control)')%>%
   select(rain.tot.mm, Q.peak.m3.s, rain.peak.ts, Q.peak.ts, anti.rain.mm5d, 
          per_q, Beaver, Hydro.Seas, Site,rain.mean, event.Q.tot.m3,
-         event.quickflow.tot.m3)
+         event.quickflow.tot.m3,anti.rain.mm5d)
 
 
 BB.CB.bind <- BB_events %>%
@@ -178,12 +198,12 @@ BB.CB.bind <- BB_events %>%
 
 # ----------------------- Fit Gamma (identity) Models --------------------------------
 
-ggplot(BB.CB.bind, aes(x=rain.tot.mm, y=Q.peak.m3.s, colour=Beaver)) +
-  geom_point() +
-  stat_smooth(method='lm', formula = y~poly(x,2)) +
-  # coord_cartesian(xlim=c(0, 105e3), ylim=c(0,5))+
-  facet_wrap(~Site) +
-  theme_bw()
+# ggplot(BB.CB.bind, aes(x=rain.tot.mm, y=Q.peak.m3.s, colour=Beaver)) +
+#   geom_point() +
+#   stat_smooth(method='lm', formula = y~poly(x,2)) +
+#   # coord_cartesian(xlim=c(0, 105e3), ylim=c(0,5))+
+#   facet_wrap(~Site) +
+#   theme_bw()
 
 
 # Fit regression
@@ -198,41 +218,74 @@ BACI_m2.init <- glm2(Q.peak.m3.s ~ rain.tot.mm * Beaver * Site , data= BB.CB.bin
 
 BACI_m2 <- glm2(Q.peak.m3.s ~  rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m2.init)) # final model
 
+# Log link interaction
+
+BACI_m3 <- glm(Q.peak.m3.s ~ rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='log'))
+
 # Polynomial Model with Interaction
 
-BACI_m3 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'))
-# BACI_m3 <- glm2(Q.peak.m3.s ~ poly(rain.mean,2) + Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m3))
+BACI_m4 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'))
+
+# Polynomial (log-link) Model with Interaction
+
+BACI_m5 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='log'))
+
 
 summary(BACI_m1) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
 summary(BACI_m2)
 summary(BACI_m3) # Lowest AIC
-#interactive test
+summary(BACI_m4) 
+summary(BACI_m5) 
 
-check_model(BACI_m1, check='all') 
-check_model(BACI_m2, check='all') 
-check_model(BACI_m3, check='all') 
+# check_model(BACI_m4)
 
+reg_names_full <- c('Linear Additive (Identity-link)', 
+                    'Linear Interactive (Identity-link)', 
+                    'Linear Interactive (log-link)', 
+                    '2nd Order Polynomial Interactive (Identity-link)', 
+                    '2nd Order Polynomial Interactive (log-link)')
 
-reg_names <- c('Linear Additive', 'Linear Interaction', 'Polynomial Interaction')
+reg_names <- c('Linear Add.', 'Linear Int.', 'Linear Int. (log-link)', 'Poly. Int.', 'Poly. Int. (log-link)')
 
-merge_model_preds <- list(BACI_m1, BACI_m2, BACI_m3) %>%
+model_list <- list(BACI_m1, BACI_m2, BACI_m3,BACI_m4, BACI_m5)
+
+# plot model diagnostics.
+list(model_list, seq_along(model_list), reg_names_full) %>%
+  purrr::pwalk(., ~check_model_title(..1, ..2, ..3))
+ 
+# create model predictions for all models.
+merge_model_preds <- model_list %>%
   purrr::map2(.x=., .y=reg_names, ~makes_preds(.x, .y, BB.CB.bind)) %>%
-  bind_rows()
-
+  bind_rows() %>%
+  mutate(mod.name = fct_relevel(mod.name,reg_names))
 
 source('6_Event_Stats/add_general_facet_labs.R')
 
-BACI.glm1 <- glm.plot(BB.CB.bind, merge_model_preds, .y=Q.peak.m3.s) +
-  facet_grid(mod.name~Site) +
-  coord_cartesian(ylim=c(0,6))#+
-  # scale_y_continuous(trans='log2')
-   
-BACI.glm1.all <- add_general_facet_labs(BACI.glm1, 'Model', 'Site')
+model_compare_plot <- function(.log){
+  p <- glm.plot(BB.CB.bind, merge_model_preds, .y=Q.peak.m3.s, line = FALSE) +
+    facet_grid(mod.name~Site) 
+  if (isTRUE(.log)) {
+    p <- p + scale_y_log10(breaks = c(0.05, 1, 20)) +
+      coord_trans(ylim=c(0.03, 55))
+  } else {
+    p <- p + coord_cartesian(ylim=c(0,6))
+  }
+  add_general_facet_labs(p, 'Model', 'Site')
+}
+
+
+BACI.glmLOG <- model_compare_plot(.log=TRUE)
+BACI.glmLIN <- model_compare_plot(.log=FALSE)
+
+ggsave("6_Event_Stats/BACI_Plots/Model_CompareLOG.png", plot = BACI.glmLOG ,
+       width = 18, height = 18, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Model_CompareLIN.png", plot = BACI.glmLIN ,
+       width = 18, height = 18, units = 'cm', dpi = 600)
+
 
 source('6_Event_Stats/stats_functions.R')
-reg_tabs <- list(BACI_m1, BACI_m2, BACI_m3)
 
-p <- reg_tabs %>%
+p <- model_list %>%
   purrr::map2(.x=., .y=reg_names, ~add.stat.tab(.) %>%
                 pretty.tab(., .y))
 
@@ -240,58 +293,79 @@ p <- reg_tabs %>%
 tab_dir <- "6_Event_Stats/Model_Compare_Tabs"
 if (!dir.exists(tab_dir)) dir.create(tab_dir)
 
-
 p %>%
-  purrr::walk2(.x=., .y=c('Model1_Lin_Add.html', 'Model2_LinInt.html', 'Model3_PolyInt.html'),
+  purrr::walk2(.x=., .y=purrr::imap(reg_names_full, 
+                                     ~paste0(sprintf('Model%s_',.y), .x, '.html')),
                ~ .x %>% gtsave(.,file.path(tab_dir, .y)))
 
 
-ggsave("6_Event_Stats/BACI_Plots/Model_Compare.png", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+
 # ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.pdf", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 900)
 
-# pred differences:
+# ----- Predicted Attenuation volume vs rainfall. ---------------
 
-merge_tidy_preds <- makes_preds(BACI_m3, 'Polynomial', BB.CB.bind, 
+merge_tidy_preds <- makes_preds(BACI_m4, 'Polynomial', BB.CB.bind, 
                                                NoBeav.min=0, NoBeav.max=60, 
-                                               YesBeav.min=0, YesBeav.max=60) %>%
+                                               YesBeav.min=0, YesBeav.max=60,
+                                l=500) %>%
   bind_rows()
 
 
 pred_diff <- function(df){
   pred.diff <- df %>%
-    select(Beaver, .fitted,rain.tot.mm) %>%
+    select(Beaver, .fitted,rain.tot.mm, .se.fit, Site) %>%
     group_by(Beaver) %>%
     group_split() %>%
-    bind_cols() #%>%
-    # mutate(.diff = .fitted...2 - .fitted...4) %>%
-    # pull(.diff)
+    bind_cols() %>%
+    mutate(.diff = .fitted...2 - .fitted...7,
+           L.ci = (.fitted...2 + .se.fit...4*1.96)-(.fitted...7  - .se.fit...9*1.96),
+           U.ci = (.fitted...2 - .se.fit...4*1.96)-(.fitted...7  + .se.fit...9*1.96)) #%>%
   pred.diff
-  # df3  <- df %>%
-  #   group_by(Beaver) %>%
-  #   group_split()
-  # 
-  # df3[[1]] %>%
-  #   select(-Beaver) %>%
-  #   mutate(preds_diff = pred.diff)
   
 }
 
 
 t <- merge_tidy_preds %>%
-  
   group_by(Site) %>%
-  group_split()
-  group_map(., )
-  pivot_longer(names_from = Beaver, values_from = .fitted) %>%
-  tail()
+  group_map(., ~pred_diff(.), .keep=T) %>%
+  bind_rows()
 
-t2 <- pred_diff(t[[2]]) %>%
-  mutate(.diff = .fitted...2 - .fitted...5)
   
-ggplot(t2, aes(x=rain.tot.mm...6, y=.diff))+
-  geom_line() +
+Attenuation_p <- ggplot(t, aes(x=rain.tot.mm...3, y=.diff, fill=Site...5, colour=Site...5))+
+  geom_ribbon(aes(ymin=U.ci, ymax=L.ci), alpha=0.4) +
+  # geom_line() +
+  geom_hline(aes(yintercept=0), linetype=2)+
   theme_bw() +
-  facet_grid(mod.name~Site)
+  scale_fill_brewer(palette = "Dark2", name='Site') +
+  scale_colour_brewer(palette = "Dark2", name='Site') +
+  guides(fill ='none', colour='none') +
+  coord_cartesian(ylim=c(-0.1,0.8), xlim=c(0,40))+
+  # coord_cartesian(ylim=c(-0.25,1.0), xlim=c(0,3))+
+  labs(y= (expression("Predicted Flow Attenuation  " (m^{3}~s^{-1}))),
+       x=expression("Total Event Rainfall   " (mm))) +
+      # x=expression("Event Peak Flow   " (m^{3}~s^{-1}))) +
+  facet_wrap(~Site...5) +
+  theme(plot.title = element_text(hjust = 0.5, size = 11),
+        strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+        strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
+        legend.position = 'top')
+ggsave("6_Event_Stats/BACI_Plots/AttenuationPlot.png", plot = Attenuation_p ,width = 15, height = 15, units = 'cm', dpi = 600)
+
+
+rain_ecdf <- ecdf(BB.CB.bind$rain.tot.mm)
+
+rain_ecdf(25)
+
+t %>%
+  filter(Site...5=='Budleigh Brook (impact)',
+         U.ci > 0) %>%
+  # ggplot(aes(x=rain.tot.mm...3, y=U.ci))+
+  # geom_line()
+  summarise(max_event = max(rain.tot.mm...3)) %>%
+  mutate(percentile = rain_ecdf(max_event)) # shows that we have confidence in a
+  
+hist(BB.CB.bind$rain.tot.mm)
+
 
 # ---------------- GLM with hydrological season -------------------------------------------
 
@@ -313,15 +387,16 @@ BACI.m2.ND <- Create_Data(.data=BB.CB.bind, var='rain.tot.mm') %>%
 #plotting
 
 BACI.glm2 <- glm.plot(BB.CB.bind, BACI.m2.ND, .y=Q.peak.m3.s) + 
-  facet_grid(Hydro.Seas ~ Site)
+  facet_grid(Hydro.Seas ~ Site) +
+  scale_y_log10(breaks = c(0.05, 1, 20)) +
+  coord_trans(ylim=c(0.03, 55))
 BACI.glm2.all <- add_general_facet_labs(BACI.glm2, 'Season', 'Site')
 
 add.stat.tab(BACI_m4) %>%
-  pretty.tab(., 'Seasonal Polynomial Interactive') %>%
-  gtsave(file.path(tab_dir, 'SeasPolyInt.html'))
+  pretty.tab(., 'Seasonal Polynomial Interactive (log-link)') %>%
+  gtsave(file.path(tab_dir, 'SeasPolyInt(log-link).html'))
 
-ggsave("6_Event_Stats/BACI_Plots/GLM4_PolyIntSeason.png", plot = BACI.glm2.all ,width = 15, height = 12, units = 'cm', dpi = 600)
-
+ggsave("6_Event_Stats/BACI_Plots/PolyIntSeasonLOG.png", plot = BACI.glm2.all ,width = 15, height = 12, units = 'cm', dpi = 600)
 
 
 # ------- boxplot to show difference in Q max --------------------
@@ -364,6 +439,6 @@ print_sum_stats <- function(.data){
 BB.CB.bind %>%
   group_by(Site, Beaver) %>%
   group_split() %>%
-  purrr::map(., ~print_sum_stats(.))
+  purrr::walk(., ~print_sum_stats(.))
 
 ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.png", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
