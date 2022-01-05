@@ -16,6 +16,7 @@ library(gt)
 library(png)
 library(gtable)
 library(patchwork)
+library(ggpattern)
 # ------------- Read Data ------------------------------
 EBUD_hyd_dat1 <- read_rds(file.path(here::here(),"5_event_extraction/eventExtraction__beaver/EastBud/",
                                     "run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds"))
@@ -83,14 +84,14 @@ glm.plot <- function(.data, model.data, .y, line=TRUE) {
   .y <- enquo(.y)
   
   p <- ggplot(model.data, aes(x=rain.tot.mm, y=!!.y, colour=Beaver, fill=Beaver))+
-    geom_point(data=.data, alpha = 0.4, size=0.8)
+    geom_point(data=.data, alpha = 0.4, size=0.9, stroke=0)
   
   if (isTRUE(lines)) {
     p <- p + geom_line(aes(x=rain.tot.mm, y = .fitted))
   }
   p +
     geom_ribbon(aes(y=.fitted, ymin = .fitted - (1.96 *.se.fit), ymax = .fitted + (1.96 *.se.fit)), 
-                alpha=0.2, linetype=2, lwd=0.2) +
+                alpha=0.4, linetype=2, lwd=0.2) +
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     # coord_cartesian(ylim=c(0,7))+
@@ -228,7 +229,8 @@ BACI_m4 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.b
 
 # Polynomial (log-link) Model with Interaction
 
-BACI_m5 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='log'))
+BACI_m5 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , 
+               data= BB.CB.bind, family = Gamma(link='log'))
 
 
 summary(BACI_m1) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
@@ -237,15 +239,14 @@ summary(BACI_m3) # Lowest AIC
 summary(BACI_m4) 
 summary(BACI_m5) 
 
-# check_model(BACI_m4)
-
 reg_names_full <- c('Linear Additive (Identity-link)', 
                     'Linear Interactive (Identity-link)', 
                     'Linear Interactive (log-link)', 
                     '2nd Order Polynomial Interactive (Identity-link)', 
                     '2nd Order Polynomial Interactive (log-link)')
 
-reg_names <- c('Linear Add.', 'Linear Int.', 'Linear Int. (log-link)', 'Poly. Int.', 'Poly. Int. (log-link)')
+reg_names <- c('M1 Linear Add.', 'M2 Linear Int.', 'M3 Linear Int. (log-link)', 
+               'M4 Poly. Int.', 'M5 Poly. Int. (log-link)')
 
 model_list <- list(BACI_m1, BACI_m2, BACI_m3,BACI_m4, BACI_m5)
 
@@ -265,8 +266,9 @@ model_compare_plot <- function(.log){
   p <- glm.plot(BB.CB.bind, merge_model_preds, .y=Q.peak.m3.s, line = FALSE) +
     facet_grid(mod.name~Site) 
   if (isTRUE(.log)) {
-    p <- p + scale_y_log10(breaks = c(0.05, 1, 20)) +
-      coord_trans(ylim=c(0.03, 55))
+    p <- p + scale_y_continuous(breaks = c(0,4, 10, 20),
+                                trans=scales::pseudo_log_trans(base = 10)) +
+      coord_trans(ylim=c(0, 20))
   } else {
     p <- p + coord_cartesian(ylim=c(0,6))
   }
@@ -277,7 +279,7 @@ model_compare_plot <- function(.log){
 BACI.glmLOG <- model_compare_plot(.log=TRUE)
 BACI.glmLIN <- model_compare_plot(.log=FALSE)
 
-ggsave("6_Event_Stats/BACI_Plots/Model_CompareLOG.png", plot = BACI.glmLOG ,
+ggsave("6_Event_Stats/BACI_Plots/Model_CompareLOG2.png", plot = BACI.glmLOG ,
        width = 18, height = 18, units = 'cm', dpi = 600)
 ggsave("6_Event_Stats/BACI_Plots/Model_CompareLIN.png", plot = BACI.glmLIN ,
        width = 18, height = 18, units = 'cm', dpi = 600)
@@ -298,13 +300,22 @@ p %>%
                                      ~paste0(sprintf('Model%s_',.y), .x, '.html')),
                ~ .x %>% gtsave(.,file.path(tab_dir, .y)))
 
+model_list %>% purrr::map2_dfr(., reg_names, ~ tibble(`Model ID` = .y,
+                                                      K = with(summary(.x), nrow(coefficients)),
+                                                      AIC = with(summary(.x), aic),
+                                          `Null deviance` = with(summary(.x), null.deviance),
+                                          `Residual deviance` = with(summary(.x), deviance),
+                                          `Pseudo R2` = with(summary(.x), 1 - deviance/null.deviance))) %>%
+  mutate_if(is.numeric, round, 2) %>%
+  gt() %>%
+  tab_header(
+    title = md(sprintf('**<div style="text-align: left"> Model goodness of Fit </div>**', title))) %>%
+  gtsave(.,file.path(tab_dir, 'GoodnessOfFit.html'))
 
-
-# ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.pdf", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 900)
 
 # ----- Predicted Attenuation volume vs rainfall. ---------------
 
-merge_tidy_preds <- makes_preds(BACI_m4, 'Polynomial', BB.CB.bind, 
+merge_tidy_preds <- makes_preds(BACI_m5, 'Polynomial', BB.CB.bind, 
                                                NoBeav.min=0, NoBeav.max=60, 
                                                YesBeav.min=0, YesBeav.max=60,
                                 l=500) %>%
@@ -324,72 +335,106 @@ pred_diff <- function(df){
   
 }
 
+# Get summary stats for flow attenuation range etc.
+rain_ecdf <- ecdf(BB.CB.bind$rain.tot.mm)
+
 
 t <- merge_tidy_preds %>%
   group_by(Site) %>%
   group_map(., ~pred_diff(.), .keep=T) %>%
-  bind_rows()
+  bind_rows() %>%
+  mutate(.name = '95% confidence range',
+         rain_event_perc = rain_ecdf(rain.tot.mm...3)*100)
 
+att_region <- t %>%
+  filter(Site...5=='Budleigh Brook (impact)',
+         U.ci > 0) %>%
+  mutate(.name='Attenuation Effect')
+
+
+Attenuation_plot <- function(.var){
   
-Attenuation_p <- ggplot(t, aes(x=rain.tot.mm...3, y=.diff, fill=Site...5, colour=Site...5))+
-  geom_ribbon(aes(ymin=U.ci, ymax=L.ci), alpha=0.4) +
-  # geom_line() +
-  geom_hline(aes(yintercept=0), linetype=2)+
-  theme_bw() +
-  scale_fill_brewer(palette = "Dark2", name='Site') +
-  scale_colour_brewer(palette = "Dark2", name='Site') +
-  guides(fill ='none', colour='none') +
-  coord_cartesian(ylim=c(-0.1,0.8), xlim=c(0,40))+
-  # coord_cartesian(ylim=c(-0.25,1.0), xlim=c(0,3))+
-  labs(y= (expression("Predicted Flow Attenuation  " (m^{3}~s^{-1}))),
-       x=expression("Total Event Rainfall   " (mm))) +
-      # x=expression("Event Peak Flow   " (m^{3}~s^{-1}))) +
-  facet_wrap(~Site...5) +
-  theme(plot.title = element_text(hjust = 0.5, size = 11),
-        strip.text.x = element_text(size = 12, color = "black", face = "italic"),
-        strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
-        legend.position = 'top')
-ggsave("6_Event_Stats/BACI_Plots/AttenuationPlot.png", plot = Attenuation_p ,width = 15, height = 15, units = 'cm', dpi = 600)
+  .var = enquo(.var)
+  
+  ggplot(t, aes(x=!!.var, y=.diff))+
+    # geom_line() +
+    geom_ribbon(aes(ymin=U.ci, ymax=L.ci, fill=.name), alpha=0.2, colour='#d95f02', lwd=0.4) +
+    ggpattern::geom_ribbon_pattern(data=att_region,aes(ymin=0, ymax=U.ci,
+                                                       pattern_colour=.name, pattern_fill=.name),
+                                   fill=NA, colour=NA, pattern_size=0.1, 
+                                   pattern_alpha=0.8,
+                                   pattern ='crosshatch',pattern_density = 0.05,
+                                   pattern_spacing=0.02) +
+    geom_hline(aes(yintercept=0), linetype=2)+
+    theme_bw() +
+    scale_fill_manual(values = '#d95f02', name= '') +
+    scale_pattern_fill_manual(values = c('#1b9e77'), name='') +
+    scale_pattern_colour_manual(values = c('#1b9e77'), name='') +
+    labs(y= (expression("Predicted Flow Attenuation  " (m^{3}~s^{-1})))) +
+    facet_wrap(~Site...5) +
+    theme(plot.title = element_text(hjust = 0.5, size = 11),
+          strip.text.x = element_text(size = 12, color = "black", face = "italic"),
+          strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
+          legend.position = 'bottom')
+} 
+Attenuation_p_PERC <- Attenuation_plot(rain_event_perc) +
+  coord_cartesian(ylim=c(-0.1,3)) +
+  labs(x='Event Total Rainfall (percentile)')
+Attenuation_p_PERC
+
+Attenuation_p_RAIN <- Attenuation_plot(rain.tot.mm...3) +
+  coord_cartesian(ylim=c(-0.1,0.6), xlim=c(0,60))+
+  labs(x=expression("Total Event Rainfall   " (mm)))
+Attenuation_p_RAIN
+
+ggsave("6_Event_Stats/BACI_Plots/AttenuationPlot.png", plot = Attenuation_p_RAIN ,width = 15, height = 9, units = 'cm', dpi = 300)
+ggsave("6_Event_Stats/BACI_Plots/AttenuationPlotPERCENTILE.png", plot = Attenuation_p_PERC ,width = 15, height = 9, units = 'cm', dpi = 300)
 
 
-rain_ecdf <- ecdf(BB.CB.bind$rain.tot.mm)
-
-rain_ecdf(25)
 
 t %>%
   filter(Site...5=='Budleigh Brook (impact)',
          U.ci > 0) %>%
   # ggplot(aes(x=rain.tot.mm...3, y=U.ci))+
   # geom_line()
-  summarise(max_event = max(rain.tot.mm...3)) %>%
-  mutate(percentile = rain_ecdf(max_event)) # shows that we have confidence in a
+  summarise(max_event = max(rain.tot.mm...3),
+            peak_U.Lci = max(U.ci),
+            peak_event = rain.tot.mm...3[U.ci==max(U.ci)],
+            peak_U.Uci= L.ci[U.ci==max(U.ci)],
+            peak_zero = L.ci[rain.tot.mm...3==max_event],
+            low_zero = U.ci[rain.tot.mm...3==max_event]) %>%
+  mutate(peak_percentile = rain_ecdf(peak_event),
+         max_percentile = rain_ecdf(max_event)) %>% # shows that we have confidence in a
+  slice(1L) %>%
+  select('low_zero','peak_zero','peak_U.Uci', 'peak_U.Lci', 'peak_event', 'peak_percentile', 'max_event', 'max_percentile')
   
-hist(BB.CB.bind$rain.tot.mm)
+# hist(BB.CB.bind$rain.tot.mm)
 
 
 # ---------------- GLM with hydrological season -------------------------------------------
 
 #  Fit Regression 
 
-BACI_m4 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site * Hydro.Seas, 
-               data= BB.CB.bind, family = Gamma(link='identity')) #  prelim model run for start values
+BACI_m6 <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Hydro.Seas * Site * Beaver, 
+               data= BB.CB.bind, family = Gamma(link='log')) #  prelim model run for start values
 
-summary(BACI_m4)
+summary(BACI_m6)
 
-check_model(BACI_m4)
+check_model(BACI_m6)
 
 
 BACI.m2.ND <- Create_Data(.data=BB.CB.bind, var='rain.tot.mm') %>%
-  broom::augment(BACI_m4, type.predict = "response",
+  broom::augment(BACI_m6, type.predict = "response",
                  type.residuals = "deviance",
                  se_fit = T, newdata=.)
 
 #plotting
 
 BACI.glm2 <- glm.plot(BB.CB.bind, BACI.m2.ND, .y=Q.peak.m3.s) + 
-  facet_grid(Hydro.Seas ~ Site) +
-  scale_y_log10(breaks = c(0.05, 1, 20)) +
-  coord_trans(ylim=c(0.03, 55))
+  facet_grid(Hydro.Seas ~ Site) + 
+  scale_y_continuous(breaks = c(0,4, 10, 20),
+                       trans=scales::pseudo_log_trans(base = 10)) +
+  coord_trans(ylim=c(0, 20))
 BACI.glm2.all <- add_general_facet_labs(BACI.glm2, 'Season', 'Site')
 
 add.stat.tab(BACI_m4) %>%

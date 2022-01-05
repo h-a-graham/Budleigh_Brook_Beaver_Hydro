@@ -16,15 +16,28 @@ cb_events_folder <- file.path(here(),'5_event_extraction/eventExtraction__beaver
 
 # --------- Run the functions ----------------
 
-bb <- df_overlay(events_folder=bb_events_folder) %>%
+bb_dat <- df_overlay(events_folder=bb_events_folder) 
+bb_list <- fit_gams(bb_dat)
+bb <- bb_list$data %>%
   mutate(Site = as.factor('Budleigh Brook (impact)'))
+
 
 cb_cutoff <- max(bb$event_step)
 
-cb <- df_overlay(events_folder=cb_events_folder, maxhrs = cb_cutoff)%>%
+cb_dat <- df_overlay(events_folder=cb_events_folder)
+cb_list <- fit_gams(cb_dat, maxhrs = cb_cutoff)
+cb <- cb_list$data %>%
   mutate(Site = as.factor('Colaton Brook (control)'))
 
-
+check_gam <- function(.gam){
+  layout(matrix(1:4, ncol = 2, byrow = TRUE))
+  mgcv::gam.check(.gam)
+  layout(1)
+}
+check_gam(bb_list$flowGAM)
+check_gam(cb_list$flowGAM)
+check_gam(bb_list$rainGAM)
+check_gam(cb_list$rainGAM)
 # bb <- df_overlay(events_folder=bb_events_folder, beaver_time = "2019-01-01 00:00") %>%
 #   mutate(Site = 'Budleigh Brook (impact)')
 
@@ -35,7 +48,14 @@ sites_bind <- bind_rows(bb, cb)
 PeakQ.df <- sites_bind %>%
   group_by(Site, beaver) %>%
   summarise(PredQMax = max(gam.fitted),
-            PredQMaxTime = event_step[which.max(gam.fitted)])
+            PredQMaxTime = event_step[which.max(gam.fitted)]) 
+
+# summ stats.
+PeakQ.df %>%
+  select(-PredQMax) %>%
+  group_by(Site) %>%
+  summarise(lagChange = (PredQMaxTime[beaver=='Yes']-PredQMaxTime[beaver=='No'])/
+              PredQMaxTime[beaver=='No'] *100)
 
 combine_sites <- sites_bind %>%
   plot_overlay(., se=T, method = 'gam', ticks = FALSE) +  # for faster plotting set se=FALSE
@@ -53,7 +73,7 @@ combine_sites <- sites_bind %>%
 
 # # ------------------------- save image ----------------------------------
 combine_sites
-out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.png')
+# out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam.png')
 # ggsave(filename = out_path,plot = combine_sites, dpi=300)
 
 # 
@@ -90,7 +110,7 @@ p1 <- ggplot(comb, aes(x=event_step, y=.fitted_rain , colour=beaver, fill=beaver
   labs(color='Beaver Present', fill='Beaver Present') +
   # coord_cartesian(y=c(limits = c(0, 1)))+
   facet_wrap(~Site) +
-  guides(fill=F, colour=F)+
+  guides(fill='none', colour='none')+
   scale_y_reverse(limits = c(1, 0),labels = scales::number_format(accuracy = 0.1)) +
   theme(axis.title.x=element_blank(),
               axis.text.x=element_blank(),
@@ -114,10 +134,10 @@ p2 <- combine_sites +
 
 
 rain_FlowPlot <- p1/p2 + plot_layout(heights = c(1, 2))
-
+rain_FlowPlot
 rain_FlowPlot_path <- file.path(here(), '8_event_overlay/exports', 'FlowRainOverlayNOTRANSrev.png')
 ggsave(filename = rain_FlowPlot_path,plot = rain_FlowPlot, 
-       width = 13, height = 16, units = 'cm', dpi = 300)
+       width = 18, height = 18, units = 'cm', dpi = 300)
   
 
 

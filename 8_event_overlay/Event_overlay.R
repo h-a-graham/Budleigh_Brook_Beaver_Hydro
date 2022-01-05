@@ -67,14 +67,16 @@ safe_read <- function(evf, x, id, pb, beaver_time){
 # function to fit gam and return full dataframe
 gam_func <- function(.data) {
   
-  gam1 <- mgcv::gam(q_m3_s ~ s(event_step, by=beaver, bs='cs') + beaver,
-              method = "REML", data = .data) %>%
-    broom::augment() %>%
+  gamA <- mgcv::gam(q_m3_s ~ s(event_step, by=beaver, bs='cs', k=5) + beaver,
+              method = "REML", data = .data, family=Gamma(link='log')) 
+  gam1 <- gamA %>%
+    broom::augment(type.predict='response') %>%
     rename_with(., starts_with("."), .fn = ~(paste0("gam", .)))
   
-  gam2 <- mgcv::gam(rainfall_mm_h ~ s(event_step, by=beaver, bs='cs') + beaver,
-                    method = "REML", data = .data) %>%
-    broom::augment() %>%
+  gamB <- mgcv::gam(rainfall_mm_h ~ s(event_step, by=beaver, bs='cs', k=-1) + beaver,
+                    method = "REML", data = .data,family=gaussian(link='identity')) 
+  gam2 <- gamB %>%
+    broom::augment(type.predict='response') %>%
     select(-c(rainfall_mm_h, beaver, event_step)) %>%
     rename_all(., ~paste0(., "_rain"))
   
@@ -82,7 +84,7 @@ gam_func <- function(.data) {
     bind_cols(select(.data, event_id, tot_rain, s_flow, rainfall_mm_h), ., gam2) 
     
   
-  # gam.lo=gam(q_m3_s~ s(event_step, df=7) * beaver,
+  # gam.lo=gam(q_m3_s~ s(event_step, df=7) * beaver, 
   #            data=.data)
   # gam.lo=gam(q_m3_s~ lo(event_step,by=beaver, df=7) * tot_rain * s_flow,
   #            data=.data)
@@ -100,7 +102,7 @@ gam_func <- function(.data) {
   
   
   # return(list(gam1, df))
-  return(df)
+  return(list(data=df, flowGAM = gamA, rainGAM=gamB))
   
 }
 
@@ -110,7 +112,7 @@ gam_func <- function(.data) {
 #map function to file list and join
 # beaver time = NULL defaults to Budleigh Brook beaver timings - use "2017-01-01 00:00" type sting for custom timings.
 
-df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_time=NULL){
+df_overlay <- function(events_folder,  beaver_time=NULL){
   
   
   event_path_list = list.files(events_folder)
@@ -125,15 +127,19 @@ df_overlay <- function(events_folder, perc_cutoff = 0.95, maxhrs = NULL, beaver_
     mutate(event_step = event_step/4) 
   
   
+  
+}
+
+fit_gams <- function(events_combined, maxhrs = NULL, perc_cutoff = 0.95){
   if (is.null(maxhrs)){
     maxhrs <- quantile(events_combined$event_step[events_combined$beaver == 'Yes'], probs = c(perc_cutoff))
   } 
   
-  events_combined <- events_combined %>%
+  events_combined %>%
     filter(event_step < maxhrs) %>%
     gam_func(.) 
-  
 }
+
 
 # --------------- Function to plot event overlays -----------------------
 
@@ -144,7 +150,7 @@ plot_overlay <- function(.data, se=TRUE, method='gam', ticks= TRUE){
     scale_y_log10(
       breaks = scales::trans_breaks("log10", function(x) 10^x),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-    labs(x = 'time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
+    labs(x = 'Time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
     scale_color_manual(values = c('#A6190D', '#244ED3')) +
     scale_fill_manual(values = c('#A6190D', '#244ED3')) +
     theme_bw() + 
