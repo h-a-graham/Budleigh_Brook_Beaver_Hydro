@@ -5,13 +5,13 @@ options(scipen = 999)
 library(tidyverse)
 library(lubridate)
 library(broom)
-library(ggfortify)
+# library(ggfortify)
 library(grid)
 library(gridExtra)
 library(performance)
 library(glm2)
 library(ggpubr)
-library(emmeans)
+# library(emmeans)
 library(gt)
 library(png)
 library(gtable)
@@ -300,16 +300,31 @@ p %>%
                                      ~paste0(sprintf('Model%s_',.y), .x, '.html')),
                ~ .x %>% gtsave(.,file.path(tab_dir, .y)))
 
-model_list %>% purrr::map2_dfr(., reg_names, ~ tibble(`Model ID` = .y,
-                                                      K = with(summary(.x), nrow(coefficients)),
-                                                      AIC = with(summary(.x), aic),
-                                          `Null deviance` = with(summary(.x), null.deviance),
-                                          `Residual deviance` = with(summary(.x), deviance),
-                                          `Pseudo R2` = with(summary(.x), 1 - deviance/null.deviance))) %>%
+# model_list %>% purrr::map2_dfr(., reg_names, ~ tibble(`Model ID` = .y,
+#                                                       K = with(summary(.x), nrow(coefficients)),
+#                                                       AIC = with(summary(.x), aic),
+#                                           `Null deviance` = with(summary(.x), null.deviance),
+#                                           `Residual deviance` = with(summary(.x), deviance),
+#                                           `Pseudo R2` = with(summary(.x), 1 - deviance/null.deviance))) %>%
+#   mutate_if(is.numeric, round, 2) %>%
+#   gt() %>%
+#   tab_header(
+#     title = md(sprintf('**<div style="text-align: left"> Model goodness of Fit </div>**', title))) %>%
+#   gtsave(.,file.path(tab_dir, 'GoodnessOfFit.html'))
+
+
+model_list %>% 
+  purrr::map2_dfr(., reg_names, 
+                  ~ tibble(model_performance(.x) %>%
+                             mutate(`Model ID` = .y, 
+                                    K = with(summary(.x),nrow(coefficients))
+                                    )))%>%
   mutate_if(is.numeric, round, 2) %>%
+  relocate(`Model ID`, K) %>%
+  rename(`R2 Nagelkerke` = R2_Nagelkerke) %>%
   gt() %>%
   tab_header(
-    title = md(sprintf('**<div style="text-align: left"> Model goodness of Fit </div>**', title))) %>%
+    title = md(sprintf('**<div style="text-align: left"> Model Performance </div>**', title))) %>%
   gtsave(.,file.path(tab_dir, 'GoodnessOfFit.html'))
 
 
@@ -392,7 +407,7 @@ ggsave("6_Event_Stats/BACI_Plots/AttenuationPlotPERCENTILE.png", plot = Attenuat
 
 
 
-t %>%
+summ_tab <- t %>%
   filter(Site...5=='Budleigh Brook (impact)',
          U.ci > 0) %>%
   # ggplot(aes(x=rain.tot.mm...3, y=U.ci))+
@@ -402,12 +417,20 @@ t %>%
             peak_event = rain.tot.mm...3[U.ci==max(U.ci)],
             peak_U.Uci= L.ci[U.ci==max(U.ci)],
             peak_zero = L.ci[rain.tot.mm...3==max_event],
-            low_zero = U.ci[rain.tot.mm...3==max_event]) %>%
+            low_zero = U.ci[rain.tot.mm...3==max_event],
+            meanQMAX = .fitted...2[rain.tot.mm...3==peak_event],
+            lowQMAX = meanQMAX-.se.fit...4[rain.tot.mm...3==peak_event]*1.96,
+            highQMAX = meanQMAX+.se.fit...4[rain.tot.mm...3==peak_event]*1.96) %>%
   mutate(peak_percentile = rain_ecdf(peak_event),
-         max_percentile = rain_ecdf(max_event)) %>% # shows that we have confidence in a
+         max_percentile = rain_ecdf(max_event),
+         prop_atten_low = peak_U.Uci/highQMAX*100,
+         prop_atten_high = peak_U.Lci/lowQMAX*100) %>% # shows that we have confidence in a
   slice(1L) %>%
-  select('low_zero','peak_zero','peak_U.Uci', 'peak_U.Lci', 'peak_event', 'peak_percentile', 'max_event', 'max_percentile')
-  
+  select('low_zero','peak_zero','peak_U.Uci', 'peak_U.Lci', 'peak_event', 
+         'peak_percentile', 'max_event', 'max_percentile', 'meanQMAX', 'lowQMAX',
+         'highQMAX', 'prop_atten_low', 'prop_atten_high')
+
+select(summ_tab, prop_atten_low, prop_atten_high) # get attenuation as percentage of peak flow preds
 # hist(BB.CB.bind$rain.tot.mm)
 
 
@@ -437,7 +460,7 @@ BACI.glm2 <- glm.plot(BB.CB.bind, BACI.m2.ND, .y=Q.peak.m3.s) +
   coord_trans(ylim=c(0, 20))
 BACI.glm2.all <- add_general_facet_labs(BACI.glm2, 'Season', 'Site')
 
-add.stat.tab(BACI_m4) %>%
+add.stat.tab(BACI_m6) %>%
   pretty.tab(., 'Seasonal Polynomial Interactive (log-link)') %>%
   gtsave(file.path(tab_dir, 'SeasPolyInt(log-link).html'))
 
