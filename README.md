@@ -1,10 +1,8 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
 
 # East Budleigh Hydrological Analysis
+
+Data analysis for [Puttock, et al. (2021)](https://doi.org/10.1002/hyp.14017)
+and Graham, et al. (In Review).
 
 Workflow for the processing and analysis of hydrological data from East
 Budleigh EA gaug to evaluate the imapcts of Beaver on Flow regimes...
