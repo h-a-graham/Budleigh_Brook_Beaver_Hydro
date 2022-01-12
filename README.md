@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/279864563.svg)](https://zenodo.org/badge/latestdoi/279864563)
 
 # East Budleigh Hydrological Analysis
 
