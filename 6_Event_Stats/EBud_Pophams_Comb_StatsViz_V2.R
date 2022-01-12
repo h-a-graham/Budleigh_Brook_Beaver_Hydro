@@ -30,6 +30,8 @@ POP_all_flow <- read_rds(file.path(here::here(),'4_Join_Rain_to_Q/exports/Popham
   drop_na()
 
 
+
+
 # -------------- Functions ------------------------------
 
 # Create New Data for predictions
@@ -118,6 +120,10 @@ BB.CB.bind <- BB_events %>%
   bind_rows(CB_evetns) %>%
   mutate(Site = fct_relevel(Site, "Colaton Brook (control)", "Budleigh Brook (impact)"))
 
+# Pearson's r for paper.
+# library(GGally)
+# ggpairs(EBUD_hyd_dat, columns = c("Q.peak.m3.s","rain.tot.mm", "rain.mean"))
+# ggpairs(POP_hyd_dat, columns = c("Q.peak.m3.s","rain.tot.mm", "rain.mean"))
 
 
 # ------- boxplot to show difference in Q max --------------------
@@ -169,75 +175,40 @@ BB.CB.bind %>%
 
 
 
-ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.jpg", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_Boxplot.png", plot = fb1,width = 15, height = 15, units = 'cm', dpi = 600)
 
 
-# ----------------------- Fit Gamma (identity) Model --------------------------------
-
-# Fit regression
-BACI_m1 <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) # prelim run to get starting vals
-
-BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm + Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1)) # final model
-
-summary(BACI_m1b) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
-
-
-#interactive test
-
-# Fit regression
-# BACI_m1 <- glm2(Q.peak.m3.s ~ rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) # prelim run to get starting vals
-# 
-# BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1)) # final model
-# 
-# summary(BACI_m1b)
-
-
-# Check Diagnostics
-autoplot(BACI_m1b, which = 1:6, ncol = 3, label.size = 3) #
-check_model(BACI_m1b, check='all') #
-
-
-# Run Anaova on model (useful to compare means but not really what we're intersted in - here Beaver alone is significant.)
-BACI.aov1 <- aov(BACI_m1b)
-summary(BACI.aov1)
-
-summary(anova(BACI_m1b))
-car::Anova(BACI.aov1,type="3")
-
-# Create New data for predictions
-BACI.m1.ND <- Create_Data(.data=BB.CB.bind, var='rain.tot.mm') %>%
-  broom::augment(BACI_m1b, type.predict = "response",
-                 type.residuals = "deviance",
-                 se_fit = T, newdata=.)
-
+#-------- functions --------
 # function to create Tidy Regression SUmmary table
-add.stat.tab <- function(.model){ # function to create a table for additive model
-  tidy(.model) %>%
+add.stat.tab <- function(.model, poly=F){ # function to create a table for additive model
+  m <- tidy(.model) %>%
     mutate_at(vars(estimate, std.error, statistic), round,3) %>%
     mutate(p.value = ifelse(p.value < 0.001, '< 0.001 **', 
                             ifelse(p.value < 0.05, paste(formatC(p.value,format = "f", 3), '*', sep = " "),
                                    ifelse(p.value < 0.1, paste(formatC(p.value,format = "f", 3), '.', sep = " "),
                                           formatC(p.value,format = "f", 3))))) %>%
-    rename(T.statistic = statistic) %>%
-    mutate(term = c('Intercept', 'Total Rainfall', 'Beaver', 'Budleigh Brook', 'Beaver:Budleigh Brook'))
+    rename(T.statistic = statistic)
+  if (isFALSE(poly)){
+    m <- m %>% mutate(term = c('Intercept', 'Total Rainfall', 'Beaver', 'Budleigh Brook', 'Beaver:Budleigh Brook'))
+  } else {
+    m <- m %>% mutate(term = c('Intercept', 'poly(rain.tot.mm, 2)1', 'poly(rain.tot.mm, 2)2', 'Beaver', 
+                               'Budleigh Brook', 'Beaver:Budleigh Brook'))
+  }
+    m
 }
 
-BACI.m1.tidy <- add.stat.tab(BACI_m1b)
+
 
 # Function to Create Tidy table of marginal means
 
 emmeans.tab <- function(.emmeans.obj){
-  tidy(.emmeans.obj, conf.int = TRUE) %>%
-    rename(`Lower CL` = "asymp.LCL") %>%
-    rename(`Upper CL` = "asymp.UCL") %>%
-    select(-df, -z.ratio, -p.value) %>%
+  broom::tidy(.emmeans.obj, conf.int = TRUE) %>%
+    rename(`Lower CL` = "conf.low") %>%
+    rename(`Upper CL` = "conf.high") %>%
+    select(-df, -p.value, -statistic) %>%
     mutate_at(vars(estimate, std.error, `Lower CL`, `Upper CL`), round,3)
-    
-}
-
-BACI.emm.1 <- emmeans(BACI_m1b,  ~Beaver * Site)
   
-BACI.mm1.tidy <- emmeans.tab(BACI.emm.1)
+}
 
 
 # plotting...
@@ -274,17 +245,82 @@ pretty.tab <- function(model.tab, title, size.cm){
 # 
 join.hori <- function(tab.1, tab.2, w1, w2, t1, t2) {
   x11()
-  g <- grid.arrange(pretty.tab(tab.1, t1, w1), pretty.tab(tab.2, t2, w2), ncol=2)
+  if (is.null(tab.2)){
+    g <- grid.arrange(pretty.tab(tab.1, t1, w1), ncol=1)
+  } else {
+    g <- grid.arrange(pretty.tab(tab.1, t1, w1), pretty.tab(tab.2, t2, w2), ncol=2)
+  }
+  
   dev.off()
   return(g)
 }
 
-join.vert <- function(.plot, .tab1, .tab2, w1, w2, t1, t2){
-  grid.arrange(.plot, join.hori(.tab1, .tab2, w1, w2, t1, t2),
-                      nrow=2,
-                      as.table=TRUE,
-                      heights=c(3.5,1.5))
+join.vert <- function(.plot, .tab1, .tab2=NULL, w1, w2, t1, t2){
+grid.arrange(.plot, join.hori(.tab1, .tab2, w1, w2, t1, t2),
+                 nrow=2,
+                 as.table=TRUE,
+                 heights=c(3.5,1.5))
+ 
 } 
+
+
+# ----------------------- Fit Gamma (identity) Model --------------------------------
+
+# Fit regression
+
+
+
+# fit_model_1 <- function(df, poly=F){
+  # if (isFALSE(poly)){
+    BACI_m1 <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) # prelim run to get starting vals
+    
+    BACI_m1b <- glm2(Q.peak.m3.s ~  rain.tot.mm + Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1)) # final model
+    
+  # } else if (isTRUE(poly)) {
+  #   BACI_m1b <- glm(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'))
+  # }
+
+  summary(BACI_m1b) # Crucially, interaction between site and BEaver is significant and negative i.e beaver effect is stat sig. and reduced and impacted site
+  
+  
+  #interactive test
+  
+  # Fit regression
+  # BACI_m1b <- glm2(Q.peak.m3.s ~ poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) # prelim run to get starting vals
+  # 
+  # BACI_m1b <- glm2(Q.peak.m3.s ~  poly(rain.tot.mm,2) * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m1)) # final model
+  # 
+  # summary(BACI_m1b)
+  
+  
+  # Check Diagnostics
+  autoplot(BACI_m1b, which = 1:6, ncol = 3, label.size = 3) #
+  # autoplot(BACI_m1p, which = 1:6, ncol = 3, label.size = 3)
+  check_model(BACI_m1b, check='all') 
+  
+  # Run Anaova on model (useful to compare means but not really what we're intersted in - here Beaver alone is significant.)
+  # BACI.aov1 <- aov(BACI_m1b)
+  # summary(BACI.aov1)
+  # 
+  # summary(anova(BACI_m1b))
+  # car::Anova(BACI.aov1,type="3")
+  
+  
+  BACI.m1.tidy <- add.stat.tab(BACI_m1b, poly=F)
+  
+  # Create New data for predictions
+  BACI.m1.ND <- Create_Data(.data=BB.CB.bind, var='rain.tot.mm') %>%
+    broom::augment(BACI_m1b, type.predict = "response",
+                   type.residuals = "deviance",
+                   se_fit = T, newdata=.)
+  
+  
+  
+  BACI.emm.1 <- emmeans(BACI_m1b,  ~Beaver * Site)
+  
+  BACI.mm1.tidy <- emmeans.tab(BACI.emm.1)
+
+
 
 
 
@@ -292,17 +328,18 @@ BACI.glm1 <- glm.plot(BB.CB.bind, BACI.m1.ND) +
   facet_wrap(~Site, ncol=2)
 
 BACI.glm1.all <- join.vert(BACI.glm1, BACI.m1.tidy, BACI.mm1.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+# BACI.glm1.all <- join.vert(BACI.glm1, BACI.m1.tidy, NULL, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
 
-ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.jpg", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1B.png", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 ggsave("6_Event_Stats/BACI_Plots/Fig2.GLM1.pdf", plot = BACI.glm1.all ,width = 15, height = 15, units = 'cm', dpi = 900)
 
 # ---------------- GLM with hydrological season -------------------------------------------
 
 #  Fit Regression 
 
-BACI_m2 <- glm2(Q.peak.m3.s ~ rain.tot.mm + Hydro.Seas * Beaver * Site, data= BB.CB.bind, family = Gamma(link='identity')) #  prelim model run for start values
-BACI_m2b <- glm2(Q.peak.m3.s ~ rain.tot.mm + Hydro.Seas * Beaver * Site, data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m2))
-BACI_m2c <- glm2(Q.peak.m3.s ~ rain.tot.mm + Hydro.Seas * Beaver * Site, data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m2b))
+BACI_m2 <- glm2(Q.peak.m3.s ~ rain.tot.mm +Hydro.Seas * Beaver * Site , data= BB.CB.bind, family = Gamma(link='identity')) #  prelim model run for start values
+BACI_m2b <- glm2(Q.peak.m3.s ~ rain.tot.mm +Hydro.Seas * Beaver * Site, data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m2))
+BACI_m2c <- glm2(Q.peak.m3.s ~ rain.tot.mm +Hydro.Seas * Beaver * Site, data= BB.CB.bind, family = Gamma(link='identity'), start = coef(BACI_m2b))
 
 summary(BACI_m2c)
 
@@ -346,7 +383,7 @@ BACI.glm2 <- glm.plot(BB.CB.bind, BACI.m2.ND) +
 BACI.glm2.all <- join.vert(BACI.glm2, BACI.m2.tidy, BACI.mm2.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
 
 
-ggsave("6_Event_Stats/BACI_Plots/Fig3.GLM2.jpg", plot = BACI.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Fig3.GLM2.png", plot = BACI.glm2.all ,width = 15, height = 15, units = 'cm', dpi = 600)
 
 
 # ---------------- GLM for high flow events --------------------------------
@@ -354,38 +391,47 @@ ggsave("6_Event_Stats/BACI_Plots/Fig3.GLM2.jpg", plot = BACI.glm2.all ,width = 1
 # Budleigh Brook
 
 # Select all flow events with magnitude greater than Q5 (Flow exceeded 5% of the time)
-BB.CB_big_storms <- BB.CB.bind %>%
-  filter(per_q < 5)
 
-BACI_m3  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_big_storms, family = Gamma(link='identity')) # prelim model to get starting vals
-BACI_m3b  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_big_storms, family = Gamma(link='identity'), start = coef(BACI_m3)) # final model
+high_flows_glm <- function(df, threshold) {
+  
+  BB.CB_big_storms <- df %>%
+    filter(per_q < threshold)
+  
+  BACI_m3  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, 
+                   data= BB.CB_big_storms, family = Gamma(link='identity')) # prelim model to get starting vals
+  BACI_m3b  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, 
+                    data= BB.CB_big_storms, family = Gamma(link='identity'), 
+                    start = coef(BACI_m3), control=list(maxit=100)) # final model
+  
+  summary(BACI_m3b) 
+  
+  check_model(BACI_m3b)
+  autoplot(BACI_m3b, which = 1:6, ncol = 3, label.size = 3)
+  
+  BACI.m3.ND <- Create_Data(.data=BB.CB_big_storms, var='rain.tot.mm')%>%
+    broom::augment(BACI_m3b, type.predict = "response",
+                   type.residuals = "deviance",
+                   se_fit = T, newdata=.)
+  
+  BACI.m3.tidy <- add.stat.tab(BACI_m3b)
+  
+  BACI.emm.3 <- emmeans(BACI_m3b, ~Beaver * Site)
+  
+  BACI.mm3.tidy <- emmeans.tab(BACI.emm.3)
+  
+  # plotting
+  
+  BACI.glm3 <- glm.plot(BB.CB_big_storms, BACI.m3.ND) + 
+    facet_wrap(~ Site, ncol=2)
+  
+  join.vert(BACI.glm3, BACI.m3.tidy, BACI.mm3.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+}
 
-summary(BACI_m3b) 
+BACI.glm3.all <- high_flows_glm(BB.CB.bind, 5)
+BACI.glm3.allQ2 <- high_flows_glm(BB.CB.bind, 2)
 
-check_model(BACI_m3b)
-autoplot(BACI_m3b, which = 1:6, ncol = 3, label.size = 3)
-
-BACI.m3.ND <- Create_Data(.data=BB.CB_big_storms, var='rain.tot.mm')%>%
-  broom::augment(BACI_m3b, type.predict = "response",
-                 type.residuals = "deviance",
-                 se_fit = T, newdata=.)
-
-BACI.m3.tidy <- add.stat.tab(BACI_m3b)
-
-BACI.emm.3 <- emmeans(BACI_m3b, ~Beaver * Site)
-
-BACI.mm3.tidy <- emmeans.tab(BACI.emm.3)
-
-# plotting
-
-BACI.glm3 <- glm.plot(BB.CB_big_storms, BACI.m3.ND) + 
-  facet_wrap(~ Site, ncol=2)
-
-BACI.glm3.all <- join.vert(BACI.glm3, BACI.m3.tidy, BACI.mm3.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
-
-
-ggsave("6_Event_Stats/BACI_Plots/Fig4.GLM3.jpg", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
-
+ggsave("6_Event_Stats/BACI_Plots/Fig4.GLM3.png", plot = BACI.glm3.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Fig4B.GLM3_Q2.png", plot = BACI.glm3.allQ2 ,width = 15, height = 15, units = 'cm', dpi = 600)
 # ------------------ GLM for high flows and wet antecedent conditions -----------------------------------
 
 # Select flow events with the wettest (top 25%) antecedent (5 days preceeding) condition and with a peak flow
@@ -393,39 +439,52 @@ ggsave("6_Event_Stats/BACI_Plots/Fig4.GLM3.jpg", plot = BACI.glm3.all ,width = 1
 
 # Budleigh Brook
 
-BB.CB_Wet_Ante_df <- BB.CB_big_storms %>%
-  filter(anti.rain.mm5d > quantile(anti.rain.mm5d, .75))
+high_flows_big_storms_glm <- function(df, q_thresh, p_thresh=0.75, poly=F){
+  
+  BB.CB_Wet_Ante_df <- df %>%
+    dplyr::filter(per_q < q_thresh,
+           anti.rain.mm5d > quantile(anti.rain.mm5d, p_thresh))
+  
+  if (isFALSE(poly)){
+    BACI_m4  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity')) # prelim model to get starting vals
+    BACI_m4b  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity'), start = coef(BACI_m4)) # final model
+  } else if (isTRUE(poly)) {
+    BACI_m4  <- glm2(Q.peak.m3.s ~ poly(rain.tot.mm,2) + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity')) # prelim model to get starting vals
+    BACI_m4b  <- glm2(Q.peak.m3.s ~ poly(rain.tot.mm,2) + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity'), start = coef(BACI_m4)) # final model
+    
+  }
 
+  summary(BACI_m4b) 
+  
+  check_model(BACI_m4b)
+  autoplot(BACI_m4b, which = 1:6, ncol = 3, label.size = 3)
+  
+  BACI.m4.ND <- Create_Data(.data=BB.CB_Wet_Ante_df, var='rain.tot.mm')%>%
+    broom::augment(BACI_m4b, type.predict = "response",
+                   type.residuals = "deviance",
+                   se_fit = T, newdata=.)
+  
+  BACI.m4.tidy <- add.stat.tab(BACI_m4b)
+  
+  BACI.emm.4 <- emmeans(BACI_m4b, ~Beaver * Site)
+  
+  BACI.mm4.tidy <- emmeans.tab(BACI.emm.4)
+  
+  # plotting
+  
+  BACI.glm4 <- glm.plot(BB.CB_Wet_Ante_df, BACI.m4.ND) + 
+    facet_wrap(~ Site, ncol=2)
+  
+  join.vert(BACI.glm4, BACI.m4.tidy, BACI.mm4.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
+  
+}
 
-BACI_m4  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity')) # prelim model to get starting vals
-BACI_m4b  <- glm2(Q.peak.m3.s ~ rain.tot.mm + Beaver * Site, data= BB.CB_Wet_Ante_df, family = Gamma(link='identity'), start = coef(BACI_m4)) # final model
+BACI.glm4.all <- high_flows_big_storms_glm(BB.CB.bind, q_thresh= 5, poly=F)
 
-summary(BACI_m4b) 
+BACI.glm4.all_Q2 <- high_flows_big_storms_glm(BB.CB.bind, q_thresh= 2)
 
-check_model(BACI_m4b)
-autoplot(BACI_m4b, which = 1:6, ncol = 3, label.size = 3)
-
-BACI.m4.ND <- Create_Data(.data=BB.CB_Wet_Ante_df, var='rain.tot.mm')%>%
-  broom::augment(BACI_m4b, type.predict = "response",
-                 type.residuals = "deviance",
-                 se_fit = T, newdata=.)
-
-BACI.m4.tidy <- add.stat.tab(BACI_m4b)
-
-BACI.emm.4 <- emmeans(BACI_m4b, ~Beaver * Site)
-
-BACI.mm4.tidy <- emmeans.tab(BACI.emm.4)
-
-# plotting
-
-BACI.glm4 <- glm.plot(BB.CB_Wet_Ante_df, BACI.m4.ND) + 
-  facet_wrap(~ Site, ncol=2)
-
-BACI.glm4.all <- join.vert(BACI.glm4, BACI.m4.tidy, BACI.mm4.tidy, 5.9, 6.3, 'Regression Summary', 'Marginal Means')
-
-
-ggsave("6_Event_Stats/BACI_Plots/Fig5.GLM4.jpg", plot = BACI.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
-
+ggsave("6_Event_Stats/BACI_Plots/Fig5.GLM4.png", plot = BACI.glm4.all ,width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave("6_Event_Stats/BACI_Plots/Fig5.GLM4_Q2.png", plot = BACI.glm4.all_Q2 ,width = 15, height = 15, units = 'cm', dpi = 600)
 
 # --------------- Q5 Q95 (Flashiness Ratios) -------------------------
 
@@ -530,5 +589,5 @@ fdc.join.plot <- join.vert(fdc.plots, EB_FlowSumTab, POP_FlowSumTab, 5.9, 5.9, '
 
 
 
-ggsave(file.path(here::here(),"6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.jpg"), plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave(file.path(here::here(),"6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.png"), plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
 

@@ -57,6 +57,7 @@ PeakQ.df <- sites_bind %>%
             RL_gradientAvg = (max(gam.fitted) - gam.fitted[which.max(.fitted_rain)])/lagTime,
             RL_gradientLow = (gam.LowCI[which.max(gam.fitted)] - gam.HighCI[which.max(.fitted_rain)])/lagTime,
             RL_gradientHigh = (gam.HighCI[which.max(gam.fitted)] - gam.LowCI[which.max(.fitted_rain)])/lagTime) %>%
+
   mutate(height = case_when(beaver == 'Yes' ~ 1,
                             TRUE ~ 2.5),
          .label = case_when(Site == 'Budleigh Brook (impact)' ~ "Lag time (Peak rain to Peak Q)",
