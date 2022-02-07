@@ -1,4 +1,4 @@
-# A bit of an experiment - to overlay all events, get rolling mean...
+# script to generate GAM hydrographs
 
 library(tidyverse)
 library(here)
@@ -143,7 +143,7 @@ fit_gams <- function(events_combined, maxhrs = NULL, perc_cutoff = 0.95){
 
 # --------------- Function to plot event overlays -----------------------
 
-plot_overlay <- function(.data, se=TRUE, method='gam', ticks= TRUE){
+plot_overlay <- function(.data, se=TRUE, method='gam', ticks= TRUE, colours=c("#7c668c", "#a56457")){ #'#A6190D', '#244ED3'
   
   p <- ggplot(.data, aes(x=event_step, y=q_m3_s , group=event_id, colour=beaver, fill=beaver)) +
     geom_line(alpha=0.05, lwd=0.4) +
@@ -151,10 +151,10 @@ plot_overlay <- function(.data, se=TRUE, method='gam', ticks= TRUE){
       breaks = scales::trans_breaks("log10", function(x) 10^x),
       labels = scales::trans_format("log10", scales::math_format(10^.x))) +
     labs(x = 'Time since event start (hrs)', y= (expression('Flow  ' (m^{3}~s^{-1})))) +
-    scale_color_manual(values = c('#A6190D', '#244ED3')) +
-    scale_fill_manual(values = c('#A6190D', '#244ED3')) +
+    scale_color_manual(values = colours) +
+    scale_fill_manual(values = colours) +
     theme_bw() + 
-    labs(color='Beaver Present', fill='Beaver Present') 
+    labs(color='Beaver Status at Impacted Site', fill='Beaver Status at Impacted Site') 
   
   if (isTRUE(ticks)){
     p <- p + annotation_logticks(sides='l')

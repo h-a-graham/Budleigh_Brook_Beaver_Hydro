@@ -139,7 +139,7 @@ flowbox <- function(.data, yax) {
     ylab(yax)+
     xlab('Beaver Present in Budleigh Brook') +
     theme_bw() +
-    coord_cartesian(y=c(0,5))+
+    # coord_cartesian(y=c(0,5))+
     facet_wrap(~Site, ncol=2)+
     theme(legend.position="none",
           axis.title.y = element_text(margin = margin(t = 0, r = 15, b = 0, l = 0)),
@@ -151,8 +151,10 @@ flowbox <- function(.data, yax) {
   
 }
 
-fb1 <- flowbox(BB.CB.bind, expression("Event Maximum Flow   " (m^{3}~s^{-1})))
-fb1
+fb1 <- flowbox(BB.CB.bind, expression("Event Maximum Flow   " (m^{3}~s^{-1}))) +
+  scale_y_continuous(breaks = c(0.03,1,4, 10, 20),
+                     trans='log')
+fb1 
 
 
 print_sum_stats <- function(.data){
