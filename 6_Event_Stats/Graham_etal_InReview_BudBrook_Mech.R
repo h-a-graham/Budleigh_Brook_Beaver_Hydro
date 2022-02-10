@@ -21,6 +21,12 @@ library(GGally)
 source('6_Event_Stats/stats_functions.R')
 source('6_Event_Stats/add_general_facet_labs.R')
 source('6_Event_Stats/mechanisms_paper_functions.R')
+source('6_Event_Stats/fdc_functions.R')
+
+# check if table export folder exists.
+tab_dir <- "6_Event_Stats/Model_Compare_Tabs"
+if (!dir.exists(tab_dir)) dir.create(tab_dir)
+
 # ------------- Read Data ------------------------------
 EBUD_hyd_dat1 <- read_rds(file.path(here::here(),"5_event_extraction/eventExtraction__beaver/EastBud/",
                                     "run_20200619_1022_value__padding2880_alpha0.98_passes3_BFI0.814/eventEx_EVENTS_metrics.rds"))
@@ -162,10 +168,6 @@ ggsave("6_Event_Stats/BACI_Plots/Model_CompareLIN.png", plot = BACI.glmLIN ,
 p <- model_list %>%
   purrr::map2(.x=., .y=reg_names, ~add.stat.tab(.) %>%
                 pretty.tab(., .y))
-
-# check if folder exists.
-tab_dir <- "6_Event_Stats/Model_Compare_Tabs"
-if (!dir.exists(tab_dir)) dir.create(tab_dir)
 
 p %>%
   purrr::walk2(.x=., .y=purrr::imap(reg_names_full, 
@@ -315,71 +317,25 @@ ggsave("6_Event_Stats/BACI_plots/Fig1.QMax_BoxplotV3.png", plot = fb1,width = 15
 # ------ Flow duration Curve Analysis ---------------
 
 
-Read.Edit.Flow <- function(.allFLow){
-  .allFLow %>%
-    mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Present",
-                                     ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
-                                              datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "Absent"))))%>%
-    filter(Beaver != "Unsure") %>%
-    drop_na()
-}
-
 EB_full_flow <- Read.Edit.Flow(EBUD_all_Q) %>%
   mutate(Site = 'Budleigh Brook (impact)')
 POP_full_flow <- Read.Edit.Flow(POP_all_Q) %>%
   mutate(Site = 'Colaton Brook (control)')
 
-# create Summary tibbles
-Flow.Sum.Tab <- function(.data){
-  site <- .data[['Site']][1]
-  .data %>%
-    group_by(Beaver) %>% 
-    summarize(Mean = mean(q), Median = median(q), R2FDC = ((log10(quantile(q, 0.66)) - log10(quantile(q, 0.33)))/(0.66-0.33))*-1,
-              Q5 = quantile(q, 0.95), Q95 = quantile(q, 0.05)) %>%
-    mutate(Beaver = c('No Beaver','Beaver'), `Q5:Q95 ratio` = Q5/Q95) %>%
-    rename(" " = Beaver) %>%
-    bind_rows(summarise(.," " = '% Change',
-                        Mean = (Mean[2]-Mean[1])/Mean[1]*100,
-                        Median = (Median[2]-Median[1])/Median[1]*100,
-                        R2FDC= (R2FDC[2]-R2FDC[1])/R2FDC[1]*100,
-                        Q5 = (Q5[2]-Q5[1])/Q5[1]*100,
-                        Q95 = (Q95[2]-Q95[1])/Q95[1]*100,
-                        `Q5:Q95 ratio` = (`Q5:Q95 ratio`[2]-`Q5:Q95 ratio`[1])/`Q5:Q95 ratio`[1]*100,))%>%
-    mutate_at(vars(Mean, Median, R2FDC, Q5, Q95, `Q5:Q95 ratio`), round,3) %>%
-    mutate(Site=site)
-}
+
 
 EB_FlowSumTab <- Flow.Sum.Tab(EB_full_flow)
 POP_FlowSumTab <- Flow.Sum.Tab(POP_full_flow)
 
 FDC_summBind <- bind_rows(Flow.Sum.Tab(EB_full_flow),
                           Flow.Sum.Tab(POP_full_flow)) %>%
-  group_by(Site)
+  group_by(Site) %>%
+  mutate_if(is.numeric, ~round(.,2))
 
 pretty.tab(FDC_summBind, 'Flow Duration Curve Metrics') %>%
   gtsave(file.path(tab_dir, 'Flow_Duration_Metrics.html'))
 
 # ----------------- flow duration curves ------------------------
-
-# Create joint table for plotting
-calc.fdc <- function(.data){
-  NoBeavCurve <-  .data %>%
-    drop_na() %>%
-    filter(Beaver == 'Absent')%>%
-    select(q, Beaver, Site) %>%
-    arrange(desc(q)) %>%
-    mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
-  
-  
-  YesBeavCurve <-  .data %>%
-    drop_na() %>%
-    filter(Beaver == 'Present')%>%
-    select(q, Beaver, Site) %>%
-    arrange(desc(q)) %>%
-    mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
-  
-  BefAftCurve <- bind_rows(NoBeavCurve, YesBeavCurve)
-}
 
 Joint.Flow <- EB_full_flow %>%
   calc.fdc(.)%>%
@@ -387,43 +343,10 @@ Joint.Flow <- EB_full_flow %>%
   mutate(Site = fct_relevel(Site, "Colaton Brook (control)", "Budleigh Brook (impact)")) 
 
 
-#plot FDC
-plot.fdc <- function(.data){
-  .data %>%
-    mutate(Site = fct_relevel(Site, "Budleigh Brook (impact)", "Colaton Brook (control)")) %>%
-    ggplot(., aes(x = pcntexceedance, y = q, colour=Beaver)) +
-    geom_line() +
-    ylab(expression(Flow~(m^{3}~s^{-1})))+
-    xlab('% time flow equalled or exceeded')+
-    labs(colour="Beaver Status at Impacted Site") +
-    scale_x_continuous(labels = scales::percent) +
-    scale_y_log10(limits=c()) +
-    geom_vline(xintercept=0.05, lwd = 0.5, linetype=5, colour='grey50') +
-    annotate("text", x=0.1, label="Q5", y=1, size=3) +
-    geom_vline(xintercept=0.95, lwd = 0.5, linetype=5, colour='grey50') +
-    annotate("text", x=0.89, label="Q95", y=1, size=3) +
-    scale_color_manual(values = c("#dd5129", "#0f7ba2")) +
-    facet_wrap(~Site) +
-    theme_bw()+
-    theme(strip.text.x = element_text(size = 12, color = "black", face = "italic"),
-          strip.background = element_rect(color="black", fill="#F6F6F8", linetype=3),
-          axis.title.x = element_text(margin = margin(t = 15, r = 0, b = 0, l = 0)),
-          legend.position=c(.18,.87),
-          legend.background=element_blank(),
-          legend.title=element_text(size=10),
-          panel.border = element_blank())
-  
-}
-
-
 fdc.plots <- plot.fdc(Joint.Flow)
 fdc.plots
 
-fdc.join.plot <- join.vert(fdc.plots, EB_FlowSumTab, POP_FlowSumTab, 5.9, 5.9, 'Budliegh Brook Flow Summary', 'Colaton Brook Flow Summary' )
-
-
-
-ggsave(file.path(here::here(),"6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.png"), plot = fdc.join.plot, width = 15, height = 15, units = 'cm', dpi = 600)
+ggsave(file.path(here::here(),"6_Event_Stats/BACI_Plots/Fig6.FlowDurCurve.png"), plot = fdc.plots, width = 18, height = 15, units = 'cm', dpi = 600)
 
 
 

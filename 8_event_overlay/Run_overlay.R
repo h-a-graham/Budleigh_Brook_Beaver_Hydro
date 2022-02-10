@@ -82,7 +82,9 @@ PeakQ.df %>%
 # flow plot
 combine_sites <- sites_bind %>%
   plot_overlay(., se=T, method = 'gam', ticks = FALSE, colours = c("#dd5129", "#0f7ba2")) +  # for faster plotting set se=FALSE
-  geom_point(data=PeakQ.df, aes(x=PredQMaxTime, y=PredQMax, group=NULL, pch='GAM Hydrograph Peak Q and Rainfall'), colour='black')+
+  geom_point(data=PeakQ.df, aes(x=PredQMaxTime, y=PredQMax, group=NULL, 
+                                pch='GAM Hydrograph Peak Q and Rainfall'), 
+             colour='black', size=3)+
   geom_segment(data=PeakQ.df, aes(x=PredPrecMaxTime,xend=PredQMaxTime, y=height, yend=height,
                                    colour=beaver, group=NULL),
                arrow = arrow(length = unit(0.03, "npc")), show.legend=FALSE)+
@@ -96,7 +98,7 @@ combine_sites <- sites_bind %>%
             size=3, colour='black') + 
   scale_y_log10()+
   coord_trans(ylim=c(1.5e-2, 10)) +
-  scale_shape_manual(values=4, name=NULL)+
+  scale_shape_manual(values=13, name=NULL)+
   guides(fill = guide_legend(override.aes = list(shape = NA),
                              order=1),
          colour = guide_legend(order=1)) +
@@ -129,7 +131,7 @@ p1 <- ggplot(sites_bind, aes(x=event_step, y=.fitted_rain , colour=beaver, fill=
   geom_ribbon(aes(x=event_step, ymin = .fitted_rain - (.se.fit_rain*1.96),
                   ymax = .fitted_rain + (.se.fit_rain*1.96), colour=beaver,
                   fill=beaver),lwd=0.5, alpha=0.7, inherit.aes = F) +
-  geom_point(data=PeakQ.df, aes(x=PredPrecMaxTime, y=PredPrecMax, group=NULL),pch=4, colour='black')+
+  geom_point(data=PeakQ.df, aes(x=PredPrecMaxTime, y=PredPrecMax, group=NULL),pch=13, size=3, colour='black')+
   geom_linerange(data=PeakQ.df, aes(x=PredPrecMaxTime, ymin=PredPrecMax, ymax=1,
                                     colour=beaver, group=NULL, y=NULL), 
                  linetype=2, alpha=0.6) +
