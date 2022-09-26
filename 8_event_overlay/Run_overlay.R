@@ -44,8 +44,9 @@ check_gam(cb_list$rainGAM)
 
 # ----------- Create combined plot for control vs impact ---------------
 sites_bind <- bind_rows(bb, cb) %>%
-  mutate(beaver = case_when(beaver == 'Yes' ~ "Present",
-                              TRUE ~ "Absent"))
+  mutate(beaver = case_when(beaver == 'Yes' ~ "After",
+                              TRUE ~ "Before"),
+         beaver = fct_relevel(beaver, "Before", "After"))
 
 
 PeakQ.df <- sites_bind %>%
@@ -61,7 +62,7 @@ PeakQ.df <- sites_bind %>%
             RL_gradientLow = (gam.LowCI[which.max(gam.fitted)] - gam.HighCI[which.max(.fitted_rain)])/lagTime,
             RL_gradientHigh = (gam.HighCI[which.max(gam.fitted)] - gam.LowCI[which.max(.fitted_rain)])/lagTime) %>%
 
-  mutate(height = case_when(beaver == "Present" ~ 1,
+  mutate(height = case_when(beaver == "After" ~ 1,
                             TRUE ~ 2.5),
          .label = case_when(Site == 'Budleigh Brook (impact)' ~ "Lag time (Peak rain to Peak Q)",
                            TRUE ~ ''))
@@ -70,14 +71,14 @@ PeakQ.df <- sites_bind %>%
 
 PeakQ.df %>%
   group_by(Site) %>%
-  summarise(lagChange = (lagTime[beaver=='Present']-lagTime[beaver=='Absent'])/
-              lagTime[beaver=='Absent'] *100,
-            lagGradientChangeAvg = (RL_gradientAvg[beaver=='Present']-RL_gradientAvg[beaver=='Absent'])/
-              RL_gradientAvg[beaver=='Absent'] *100,
-            lagGradientChangeLow = (RL_gradientLow[beaver=='Present']-RL_gradientLow[beaver=='Absent'])/
-              RL_gradientLow[beaver=='Absent'] *100,
-            lagGradientChangeHigh = (RL_gradientHigh[beaver=='Present']-RL_gradientHigh[beaver=='Absent'])/
-              RL_gradientHigh[beaver=='Absent'] *100)
+  summarise(lagChange = (lagTime[beaver=='After']-lagTime[beaver=='Before'])/
+              lagTime[beaver=='Before'] *100,
+            lagGradientChangeAvg = (RL_gradientAvg[beaver=='After']-RL_gradientAvg[beaver=='Before'])/
+              RL_gradientAvg[beaver=='Before'] *100,
+            lagGradientChangeLow = (RL_gradientLow[beaver=='After']-RL_gradientLow[beaver=='Before'])/
+              RL_gradientLow[beaver=='Before'] *100,
+            lagGradientChangeHigh = (RL_gradientHigh[beaver=='After']-RL_gradientHigh[beaver=='Before'])/
+              RL_gradientHigh[beaver=='Before'] *100)
 
 # flow plot
 combine_sites <- sites_bind %>%
@@ -122,8 +123,8 @@ out_path <- file.path(here(), '8_event_overlay/exports', 'FlowOverlay_Gam_NoTran
 PeakQ.df %>%
   select(-PredPrecMax) %>%
   group_by(Site) %>%
-  summarise(lagChange = (PredPrecMaxTime[beaver=='Present']-PredPrecMaxTime[beaver=='Absent'])/
-              PredPrecMaxTime[beaver=='Absent'] *100)
+  summarise(lagChange = (PredPrecMaxTime[beaver=='After']-PredPrecMaxTime[beaver=='Before'])/
+              PredPrecMaxTime[beaver=='Before'] *100)
 
 p1 <- ggplot(sites_bind, aes(x=event_step, y=.fitted_rain , colour=beaver, fill=beaver)) +
   geom_point(aes(y=rainfall_mm_h),alpha=0.06, lwd=0.4) +
@@ -139,7 +140,7 @@ p1 <- ggplot(sites_bind, aes(x=event_step, y=.fitted_rain , colour=beaver, fill=
   scale_color_manual(values = c("#dd5129", "#0f7ba2")) +
   scale_fill_manual(values = c("#dd5129", "#0f7ba2")) +
   theme_bw() + 
-  labs(color='Beaver Present', fill='Beaver Present') +
+  labs(color='Beaver After', fill='Beaver After') +
   facet_wrap(~Site) +
   guides(fill='none', colour='none')+
   scale_y_reverse(limits = c(1, 0),labels = scales::number_format(accuracy = 0.1)) +
