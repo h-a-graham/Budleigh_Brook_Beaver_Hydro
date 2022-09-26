@@ -4,49 +4,51 @@
 Create_Data <- function(.data, vari, NoBeav.min, NoBeav.max, YesBeav.min, 
                         YesBeav.max, l =100){
   if(missing(NoBeav.min)) {
-    NoBeav.min <- .data %>% filter(Beaver == 'Absent') %>% select(!!vari) %>% 
+    NoBeav.min <- .data %>% filter(Beaver == 'Before') %>% select(!!vari) %>% 
       mutate_all(~(ifelse(is.na(.), 0, .))) %>% min()}
   if(missing(NoBeav.max)) { 
-    NoBeav.max <- .data %>% filter(Beaver == 'Absent') %>% select(!!vari) %>% 
+    NoBeav.max <- .data %>% filter(Beaver == 'Before') %>% select(!!vari) %>% 
       
       mutate_all(~(ifelse(is.na(.), 0, .))) %>% max()}
   if(missing(YesBeav.min)) {
-    YesBeav.min <- .data %>% filter(Beaver == 'Present') %>% select(!!vari) %>% 
+    YesBeav.min <- .data %>% filter(Beaver == 'After') %>% select(!!vari) %>% 
       mutate_all(~(ifelse(is.na(.), 0, .))) %>% min()}
   if(missing(YesBeav.max)) {
-    YesBeav.max <- .data %>% filter(Beaver == 'Present') %>% select(!!vari) %>% 
+    YesBeav.max <- .data %>% filter(Beaver == 'After') %>% select(!!vari) %>% 
       mutate_all(~(ifelse(is.na(.), 0, .))) %>% max()}
   
   new_NoBeavWet.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), 
-                             Beaver='Absent', Hydro.Seas = 'Wet', 
+                             Beaver='Before', Hydro.Seas = 'Wet', 
                              Site = 'Budleigh Brook (impact)')
   new_NoBeavDry.BB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), 
-                             Beaver='Absent', Hydro.Seas = 'Dry', 
+                             Beaver='Before', Hydro.Seas = 'Dry', 
                              Site = 'Budleigh Brook (impact)')
   new_NoBeavWet.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), 
-                             Beaver='Absent', Hydro.Seas = 'Wet', 
+                             Beaver='Before', Hydro.Seas = 'Wet', 
                              Site = 'Colaton Brook (control)')
   new_NoBeavDry.CB <- tibble(newvar=seq(NoBeav.min, NoBeav.max, length=l), 
-                             Beaver='Absent', Hydro.Seas = 'Dry', 
+                             Beaver='Before', Hydro.Seas = 'Dry', 
                              Site = 'Colaton Brook (control)')
   new_YesBeavWet.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), 
-                              Beaver = 'Present', Hydro.Seas = 'Wet', 
+                              Beaver = 'After', Hydro.Seas = 'Wet', 
                               Site = 'Budleigh Brook (impact)')
   new_YesBeavDry.BB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), 
-                              Beaver = 'Present', Hydro.Seas = 'Dry', 
+                              Beaver = 'After', Hydro.Seas = 'Dry', 
                               Site = 'Budleigh Brook (impact)')
   new_YesBeavWet.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), 
-                              Beaver = 'Present', Hydro.Seas = 'Wet', 
+                              Beaver = 'After', Hydro.Seas = 'Wet', 
                               Site = 'Colaton Brook (control)')
   new_YesBeavDry.CB <- tibble(newvar=seq(YesBeav.min, YesBeav.max, length=l), 
-                              Beaver = 'Present', Hydro.Seas = 'Dry', 
+                              Beaver = 'After', Hydro.Seas = 'Dry', 
                               Site = 'Colaton Brook (control)')
   
   df <- bind_rows(new_NoBeavWet.BB, new_NoBeavDry.BB, new_NoBeavWet.CB, 
                   new_NoBeavDry.CB, new_YesBeavWet.BB, new_YesBeavDry.BB, 
                   new_YesBeavWet.CB, new_YesBeavDry.CB) %>%
-    mutate(!!vari := newvar) %>%
-    select(-newvar)
+    mutate(!!vari := newvar,
+           Beaver=fct_relevel(Beaver, "Before", "After")) %>%
+    select(-newvar) %>% 
+    
   
   return(df)
   
@@ -193,12 +195,16 @@ Attenuation_plot <- function(.df, .var){
   ggplot(.df, aes(x=!!.var, y=.diff))+
     # geom_line() +
     geom_ribbon(aes(ymin=U.ci, ymax=L.ci, fill=.name), alpha=0.5, colour="#fab255", lwd=0.4) +
-    ggpattern::geom_ribbon_pattern(data=att_region,aes(ymin=0, ymax=U.ci,
-                                                       pattern_colour=.name, pattern_fill=.name),
-                                   fill=NA, colour=NA, pattern_size=0.1, 
+    ggpattern::geom_ribbon_pattern(data=att_region,aes(ymin=0,
+                                                       ymax=U.ci,
+                                                       pattern_colour=.name,
+                                                       pattern_fill=.name
+                                                       ),
+                                   fill=NA, colour=NA, pattern_size=0.1,
                                    pattern_alpha=0.8,
                                    pattern ='crosshatch',pattern_density = 0.05,
-                                   pattern_spacing=0.02) +
+                                   pattern_spacing=0.02
+                                   ) +
     geom_hline(aes(yintercept=0), linetype=2)+
     theme_bw() +
     scale_fill_manual(values = "#fab255", name= '') +

@@ -3,11 +3,12 @@
 
 Read.Edit.Flow <- function(.allFLow){
   .allFLow %>%
-    mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Present",
+    mutate(Beaver = as.factor(ifelse(datetime > as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "After",
                                      ifelse(datetime > as.POSIXct("2016-08-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC") &
-                                              datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "Absent"))))%>%
+                                              datetime < as.POSIXct("2017-01-01 00:00", "%Y-%m-%d %H:%M", tz = "UTC"), "Unsure", "Before"))),
+           Beaver = fct_relevel(Beaver, "Before", "After"))%>%
     filter(Beaver != "Unsure") %>%
-    drop_na()
+    drop_na() 
 }
 
 # create Summary tibbles
@@ -35,7 +36,7 @@ Flow.Sum.Tab <- function(.data){
 calc.fdc <- function(.data){
   NoBeavCurve <-  .data %>%
     drop_na() %>%
-    filter(Beaver == 'Absent')%>%
+    filter(Beaver == 'Before')%>%
     select(q, Beaver, Site) %>%
     arrange(desc(q)) %>%
     mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))
@@ -43,7 +44,7 @@ calc.fdc <- function(.data){
   
   YesBeavCurve <-  .data %>%
     drop_na() %>%
-    filter(Beaver == 'Present')%>%
+    filter(Beaver == 'After')%>%
     select(q, Beaver, Site) %>%
     arrange(desc(q)) %>%
     mutate(pcntexceedance = seq (0, 1, by = 1/(n()-1)))

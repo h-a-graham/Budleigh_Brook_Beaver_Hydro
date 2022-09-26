@@ -77,8 +77,9 @@ CB_evetns <- POP_hyd_dat %>%
 BB.CB.bind <- BB_events %>%
   bind_rows(CB_evetns) %>%
   mutate(Site = fct_relevel(Site, "Colaton Brook (control)", "Budleigh Brook (impact)"),
-         Beaver = case_when(Beaver == 'Yes' ~ "Present",
-                                     TRUE ~ "Absent"))
+         Beaver = case_when(Beaver == 'Yes' ~ "After", # "Present"
+                                     TRUE ~ "Before"),
+         Beaver = fct_relevel(Beaver, "Before", "After")) # 
 
 # Pearson's r for paper.
 
