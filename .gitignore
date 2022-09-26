@@ -24,6 +24,7 @@
 vignettes/*.html
 vignettes/*.pdf
 
+
 # OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
 .httr-oauth
 
@@ -48,6 +49,7 @@ vignettes/*.pdf
 7_Site_Location/QGIS
 7_Site_Location/data/River_Network
 7_Site_Location/data/mapping_vectors
+7_Site_Location/exports/EastBud_detail_RS1.png
 8_event_overlay/exports/SS
 
 #unwanted file extensions
